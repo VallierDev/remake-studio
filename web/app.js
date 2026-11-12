@@ -11,10 +11,10 @@ const state = {
   page:
     location.pathname === "/settings"
       ? "settings"
-      : location.pathname === "/videos" ||
-          new URLSearchParams(location.search).get("view") === "viral"
-        ? "viral"
-        : "task",
+      : new URLSearchParams(location.search).has("run") &&
+          new URLSearchParams(location.search).get("view") !== "viral"
+        ? "task"
+        : "viral",
   runs: [],
   selected: null,
   detail: null,
@@ -372,18 +372,23 @@ function openVideoLibrary() {
   $("#settings-nav").classList.remove("active");
   $("#task-title").textContent = "爆款视频列表";
   $("#task-subtitle").textContent =
-    "自动汇总所有任务收录的视频，按播放量从高到低展示。";
+    "搜索商品，找到相关爆款，选中一条开始复刻。";
   $("#breadcrumb").textContent = "爆款视频";
-  $("#task-actions").innerHTML = "";
+  $("#task-actions").innerHTML =
+    '<button class="secondary" id="video-settings">自动更新设置</button>';
   $("#pipeline").hidden = true;
   $("#task-notice").hidden = true;
   $(".workspace-tabs").hidden = true;
   history.replaceState(null, "", "/videos");
   $("#workspace").innerHTML = `
-    <div id="auto-update-bar" class="auto-update-bar"></div>
+    <form id="video-discovery-form" class="video-discovery-form">
+      <input id="video-query" type="search" aria-label="搜索商品视频" maxlength="200" placeholder="搜索商品，例如圣诞挂件、圣诞树、圣诞晚礼服" autocomplete="off">
+      <button class="primary" type="submit">搜索视频</button>
+    </form>
+    <div class="search-suggestions"><span>试试</span><button data-product-search="圣诞挂件">圣诞挂件</button><button data-product-search="圣诞树">圣诞树</button><button data-product-search="圣诞晚礼服">圣诞晚礼服</button></div>
+    <p id="discovery-status" class="discovery-status" role="status"></p>
     <details class="library-filter-options"><summary>筛选与排序</summary>
     <div class="video-filters">
-      <label class="field video-search"><span>搜索视频、作者或关键词</span><input id="video-query" placeholder="例如 christmas、红裙或作者名" data-video-filter></label>
       <label class="field"><span>最低播放量</span><input id="video-min-views" type="number" value="0" min="0" step="10000" data-video-filter></label>
       <label class="field"><span>最低互动率 %</span><input id="video-min-rate" type="number" value="0" min="0" step="0.5" data-video-filter></label>
       <label class="field"><span>排序</span><select id="video-sort" data-video-filter><option value="views">播放量从高到低</option><option value="engagement">互动率从高到低</option></select></label>
@@ -391,6 +396,7 @@ function openVideoLibrary() {
     </details>
     <p id="video-library-count" class="library-count">正在汇总已核实视频…</p>
     <div id="video-library-results"></div>`;
+  $("#video-query").value = state.searchQuery || "";
   renderRuns();
   loadVideos().catch(showLibraryError);
 }
@@ -410,7 +416,7 @@ function showLibraryError(error) {
 async function loadVideos() {
   if (state.page !== "viral" || !$("#video-query")) return;
   const query = new URLSearchParams({
-    q: $("#video-query").value,
+    q: state.searchQuery || "",
     min_views: Math.max(0, Number($("#video-min-views").value) || 0),
     min_engagement: Math.max(0, Number($("#video-min-rate").value) || 0),
     sort: $("#video-sort").value,
@@ -419,8 +425,25 @@ async function loadVideos() {
   state.videoRequest = request;
   const result = await api("/api/videos?" + query);
   if (state.page !== "viral" || request !== state.videoRequest) return;
-  await refreshUpdateStatus();
-  const fingerprint = JSON.stringify(result);
+  const job = state.runs.find((item) => item.run === state.searchRun);
+  const searchStatus = job?.status || state.searchStatus;
+  const searching =
+    state.searchRun && ["queued", "running"].includes(searchStatus);
+  const status = $("#discovery-status");
+  if (status)
+    status.textContent =
+      searchStatus === "queued"
+        ? "搜索已加入队列，即将查找“" + state.searchQuery + "”相关视频…"
+        : searching
+          ? "正在联网寻找并核实“" +
+            state.searchQuery +
+            "”相关视频，结果会自动出现…"
+          : state.searchRun && ["failed", "interrupted"].includes(searchStatus)
+            ? "搜索未完成，可在左侧打开搜索任务查看原因。"
+            : state.searchQuery
+              ? "“" + state.searchQuery + "”的相关视频"
+              : "点击“复刻”会使用当前 Flow 账号生成视频。";
+  const fingerprint = JSON.stringify({ result, searching, searchStatus });
   if (fingerprint === state.videoFingerprint) return;
   state.videoFingerprint = fingerprint;
   $("#video-library-count").textContent =
@@ -433,18 +456,20 @@ async function loadVideos() {
         " 条";
   $("#video-library-results").innerHTML = result.videos.length
     ? `
-    <div class="table-wrap"><table><thead><tr><th>视频 / 作者</th><th>播放</th><th>点赞</th><th>加权互动率</th><th>数据更新</th><th>来源</th></tr></thead><tbody>
+    <div class="table-wrap"><table><thead><tr><th>视频 / 作者</th><th>播放</th><th>点赞</th><th>加权互动率</th><th>数据更新</th><th>复刻</th></tr></thead><tbody>
     ${result.videos
       .map(
         (row) => `<tr>
       <td class="video-cell"><a class="candidate-caption library-video-title" href="${safeSource(row.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(row.description)}">${escapeHTML(row.description || "TikTok 视频")}</a><div class="candidate-author">@${escapeHTML(row.author || "TikTok")}</div></td>
       <td class="video-views">${formatCount(row.views)}</td><td>${formatCount(row.likes)}</td><td>${((row.weighted_engagement_rate || 0) * 100).toFixed(2)}%</td>
       <td class="video-updated">${row.checked_at ? shortDate(row.checked_at) : "—"}</td>
-      <td><button class="source-task" data-run="${escapeHTML(row.source_run)}">查看任务</button></td>
+      <td><button class="primary remake-video" title="生成一条视频，会使用 Flow 积分" data-remake-video="${escapeHTML(row.id)}">复刻</button></td>
     </tr>`,
       )
       .join("")}</tbody></table></div>`
-    : '<div class="empty"><h2>没有符合条件的视频</h2><p>调整播放和互动门槛，或新建找片任务补充视频。</p></div>';
+    : searching
+      ? '<div class="empty"><h2>正在寻找相关视频</h2><p>正在核实 TikTok 原片的播放和互动数据。</p></div>'
+      : '<div class="empty"><h2>暂时没有相关视频</h2><p>换一个商品名称，或调整筛选条件再试。</p></div>';
 }
 
 const readableTime = (value) =>
@@ -578,6 +603,79 @@ document.addEventListener("click", async (event) => {
       toast("更新已加入队列");
     } catch (error) {
       button.disabled = false;
+      toast(error.message);
+    }
+  }
+});
+
+async function discoverProduct(query) {
+  query = query.trim();
+  if (!query) {
+    state.searchQuery = "";
+    state.searchRun = null;
+    state.searchStatus = null;
+    state.videoFingerprint = "";
+    await loadVideos();
+    return;
+  }
+  const created = await api("/api/videos/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+  state.searchQuery = query;
+  state.searchRun = created.run;
+  state.searchStatus = created.status;
+  state.videoFingerprint = "";
+  await refresh();
+}
+
+document.addEventListener("submit", async (event) => {
+  if (event.target.id !== "video-discovery-form") return;
+  event.preventDefault();
+  const button = event.target.querySelector("button");
+  button.disabled = true;
+  try {
+    await discoverProduct($("#video-query").value);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+document.addEventListener("click", async (event) => {
+  const suggestion = event.target.closest("[data-product-search]");
+  if (suggestion) {
+    $("#video-query").value = suggestion.dataset.productSearch;
+    try {
+      await discoverProduct(suggestion.dataset.productSearch);
+    } catch (error) {
+      toast(error.message);
+    }
+  }
+  const remake = event.target.closest("[data-remake-video]");
+  if (remake) {
+    remake.disabled = true;
+    remake.dataset.requestId ||= crypto.randomUUID();
+    try {
+      const created = await api(
+        "/api/videos/" +
+          encodeURIComponent(remake.dataset.remakeVideo) +
+          "/remake",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product: state.searchQuery || "",
+            request_id: remake.dataset.requestId,
+          }),
+        },
+      );
+      state.view = "result";
+      await selectRun(created.run);
+      toast("已开始复刻选中的视频");
+    } catch (error) {
+      remake.disabled = false;
       toast(error.message);
     }
   }

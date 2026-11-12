@@ -86,8 +86,11 @@ def command(run, options, resume=False):
     if resume:
         cmd.extend(["--resume", "--flow"])
     else:
-        for query in options.get("queries") or [options["keywords"]]:
-            cmd.extend(["--query", query])
+        if options.get("source_url"):
+            cmd.extend(["--url", options["source_url"]])
+        else:
+            for query in options.get("queries") or [options["keywords"]]:
+                cmd.extend(["--query", query])
         if options.get("seed_file"):
             cmd.extend(["--seed-file", options["seed_file"]])
         cmd.extend(["--product", options["product"],
@@ -115,13 +118,14 @@ def log_path(run):
     return STATE / f"{run}.log"
 
 
-def worker():
+def worker(mode):
     while not stop_worker.is_set():
-        schedule_update()
+        if mode == "scout":
+            schedule_update()
         with database() as db:
-            row = db.execute("SELECT * FROM jobs WHERE status='running' ORDER BY created LIMIT 1").fetchone()
+            row = db.execute("SELECT * FROM jobs WHERE status='running' AND json_extract(options,'$.mode')=? ORDER BY created LIMIT 1", (mode,)).fetchone()
             if row is None:
-                row = db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created LIMIT 1").fetchone()
+                row = db.execute("SELECT * FROM jobs WHERE status='queued' AND json_extract(options,'$.mode')=? ORDER BY CASE WHEN json_extract(options,'$.search_term') IS NOT NULL THEN 0 ELSE 1 END,created LIMIT 1", (mode,)).fetchone()
         if row is None:
             stop_worker.wait(1)
             continue
@@ -227,11 +231,14 @@ async def lifespan(_app):
         except BlockingIOError as error:
             raise RuntimeError("工作台已在运行") from error
         stop_worker.clear()
-        thread = threading.Thread(target=worker, daemon=True, name="remake-queue")
-        thread.start()
+        threads = [threading.Thread(target=worker, args=(mode,), daemon=True, name=f"remake-{mode}")
+                   for mode in ("scout", "generate")]
+        for thread in threads:
+            thread.start()
         yield
         stop_worker.set()
-        thread.join(timeout=2)
+        for thread in threads:
+            thread.join(timeout=2)
 
 
 app = FastAPI(title="Remake Studio", lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -285,11 +292,17 @@ def runs():
 
 def collected_videos():
     collected = {}
+    unplayable = {}
     for folder in sorted(RUNS.iterdir()):
         if not folder.is_dir() or folder.is_symlink() or not SLUG.fullmatch(folder.name):
             continue
         data = read_json(folder / "candidates.json")
         measured = data.get("checked_at", "")
+        for error in data.get("errors", []):
+            if "未核实到可播放的视频轨" in error:
+                match = re.search(r"/video/(\d+)", error)
+                if match:
+                    unplayable[match[1]] = max(measured, unplayable.get(match[1], ""))
         for row in data.get("candidates", []):
             identity = str(row.get("id", ""))
             url = str(row.get("url", ""))
@@ -305,7 +318,8 @@ def collected_videos():
                     "saves", "duration", "upload_date", "weighted_engagement_rate")}
                 collected[identity].update(source_run=folder.name, checked_at=measured)
             collected[identity]["queries"] = sorted(queries)
-    return collected
+    return {identity: row for identity, row in collected.items()
+            if unplayable.get(identity, "") < row["checked_at"] or identity not in unplayable}
 
 
 class UpdateSettings(BaseModel):
@@ -385,12 +399,80 @@ def update_videos():
     return {"run": schedule_update(force=True)}
 
 
+PRODUCT_TERMS = {
+    "圣诞晚礼服": "christmas evening dress", "聖誕晚禮服": "christmas evening dress",
+    "圣诞挂件": "christmas ornaments", "聖誕掛件": "christmas ornaments",
+    "圣诞树": "christmas tree", "聖誕樹": "christmas tree",
+    "圣诞": "christmas", "聖誕": "christmas", "晚礼服": "evening dress",
+    "女装": "women fashion", "挂件": "ornaments", "连衣裙": "dress",
+}
+
+
+def product_query(query):
+    translated = query.strip()
+    for original, english in PRODUCT_TERMS.items():
+        translated = translated.replace(original, " " + english + " ")
+    return " ".join(translated.split())[:500]
+
+
+class SearchVideos(BaseModel):
+    query: str = Field(min_length=1, max_length=200)
+
+
+class RemakeVideo(BaseModel):
+    product: str = Field(default="", max_length=200)
+    caption: str = Field(default="", max_length=60)
+    request_id: str = Field(default_factory=lambda: uuid4().hex, pattern=r"^[A-Za-z0-9_-]{8,80}$")
+
+
+@app.post("/api/videos/search", status_code=202)
+def search_videos(value: SearchVideos):
+    query = value.query.strip()
+    if not query:
+        raise HTTPException(422, "输入要找的商品")
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        for row in db.execute("SELECT * FROM jobs ORDER BY created DESC").fetchall():
+            options = json.loads(row["options"])
+            if str(options.get("search_term", "")).casefold() == query.casefold():
+                recent = (datetime.now(timezone.utc) - datetime.fromisoformat(row["created"])).total_seconds() < 900
+                if row["status"] in ("queued", "running") or row["status"] == "completed" and recent:
+                    return {"run": row["run"], "status": row["status"]}
+        name = "search-" + datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+        options = TaskInput(keywords=product_query(query), product="搜索 · " + query, mode="scout",
+                            min_views=0, min_engagement=0, limit=20).model_dump()
+        options["search_term"] = query
+        db.execute("INSERT INTO jobs(run,created,updated,status,options) VALUES(?,?,?,?,?)",
+                   (name, now(), now(), "queued", json.dumps(options)))
+    return {"run": name, "status": "queued"}
+
+
+@app.post("/api/videos/{identity}/remake", status_code=202)
+def remake_video(identity: str, value: RemakeVideo):
+    video = collected_videos().get(identity)
+    if not video:
+        raise HTTPException(404, "视频尚未收录，请先搜索")
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        for row in db.execute("SELECT run,options FROM jobs").fetchall():
+            if json.loads(row["options"]).get("request_id") == value.request_id:
+                return {"run": row["run"]}
+        name = "remake-" + datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+        product = value.product.strip() or (video.get("description") or "参考视频复刻")[:200]
+        options = TaskInput(keywords="", product=product, caption=value.caption, mode="generate",
+                            min_views=0, min_engagement=0).model_dump()
+        options.update(source_url=video["url"], source_video_id=identity, request_id=value.request_id)
+        db.execute("INSERT INTO jobs(run,created,updated,status,options) VALUES(?,?,?,?,?)",
+                   (name, now(), now(), "queued", json.dumps(options)))
+    return {"run": name}
+
+
 @app.get("/api/videos")
 def videos(q: str = Query(default="", max_length=500), min_views: int = Query(default=0, ge=0),
            min_engagement: float = Query(default=0, ge=0, allow_inf_nan=False),
            sort: str = Query(default="views", pattern="^(views|engagement)$")):
     collected = collected_videos()
-    needle = q.strip().casefold()
+    needle = product_query(q).casefold()
     selected = [row for row in collected.values()
                 if (row.get("views") or 0) >= min_views
                 and (row.get("weighted_engagement_rate") or 0) * 100 >= min_engagement

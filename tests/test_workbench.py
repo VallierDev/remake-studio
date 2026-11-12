@@ -16,7 +16,7 @@ class WorkbenchTests(unittest.TestCase):
         self.patches = [
             patch.object(workbench, "STATE", base / "state"),
             patch.object(workbench, "RUNS", base / "runs"),
-            patch.object(workbench, "worker", lambda: None),
+            patch.object(workbench, "worker", lambda *_: None),
         ]
         for patcher in self.patches:
             patcher.start()
@@ -104,6 +104,49 @@ class WorkbenchTests(unittest.TestCase):
         sorted_result = self.client.get("/api/videos?min_engagement=0").json()
         self.assertEqual([row["id"] for row in sorted_result["videos"]], ["22", "11"])
         self.assertEqual(self.client.get("/api/videos?sort=engagement&min_engagement=0").json()["videos"][0]["id"], "11")
+
+    def test_product_search_queues_real_discovery_and_maps_chinese(self):
+        result = self.client.post("/api/videos/search", json={"query":"圣诞挂件"})
+        self.assertEqual(result.status_code, 202)
+        run = result.json()["run"]
+        self.assertEqual(self.client.post("/api/videos/search",json={"query":"圣诞挂件"}).json()["run"],run)
+        with workbench.database() as db:
+            data = json.loads(db.execute("SELECT options FROM jobs WHERE run=?",(run,)).fetchone()[0])
+        self.assertEqual(data["mode"],"scout")
+        self.assertEqual(data["keywords"],"christmas ornaments")
+        self.assertIn("--query",workbench.command(run,data))
+        self.assertEqual(workbench.product_query("圣诞树"),"christmas tree")
+        self.assertEqual(workbench.product_query("圣诞晚礼服"),"christmas evening dress")
+
+    def test_remake_locks_exact_video_and_is_idempotent(self):
+        root=workbench.RUNS/"source"
+        root.mkdir()
+        (root/"candidates.json").write_text(json.dumps({"checked_at":"2026-11-12T00:00:00Z",
+            "candidates":[{"id":"11","url":"https://www.tiktok.com/@dress/video/11",
+                           "description":"Reference dress","views":100000,"weighted_engagement_rate":.05}]}))
+        payload={"product":"圣诞晚礼服","request_id":"fixture-request-1"}
+        response=self.client.post("/api/videos/11/remake",json=payload)
+        self.assertEqual(response.status_code,202)
+        run=response.json()["run"]
+        self.assertEqual(self.client.post("/api/videos/11/remake",json=payload).json()["run"],run)
+        with workbench.database() as db:
+            data=json.loads(db.execute("SELECT options FROM jobs WHERE run=?",(run,)).fetchone()[0])
+        cmd=workbench.command(run,data)
+        self.assertIn("--url",cmd)
+        self.assertIn("https://www.tiktok.com/@dress/video/11",cmd)
+        self.assertNotIn("--query",cmd)
+        self.assertIn("--flow",cmd)
+
+    def test_newer_unplayable_verification_hides_stale_candidate(self):
+        old = workbench.RUNS / "old"
+        old.mkdir()
+        (old / "candidates.json").write_text(json.dumps({"checked_at":"2026-11-10T00:00:00Z",
+            "candidates":[{"id":"11","url":"https://www.tiktok.com/@dress/video/11","views":10}]}))
+        latest = workbench.RUNS / "latest"
+        latest.mkdir()
+        (latest / "candidates.json").write_text(json.dumps({"checked_at":"2026-11-12T00:00:00Z",
+            "errors":["https://www.tiktok.com/@dress/video/11: 未核实到可播放的视频轨"]}))
+        self.assertEqual(self.client.get("/api/videos").json()["verified_total"],0)
 
     def test_resume_keeps_generation_checkpoint(self):
         response = self.client.post("/api/tasks", json={"keywords":"dress", "mode":"generate"})
