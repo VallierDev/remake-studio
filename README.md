@@ -19,7 +19,7 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 
 ## 安装 / Setup
 
-需要 macOS 或 Linux、Git、uv、Python 3.13、Google Chrome、yt-dlp 和 FFmpeg。中文标题需要本机中文字体，Linux 可安装 Noto Sans CJK。
+需要 macOS 或 Linux、Git、uv、Python 3.13、Google Chrome、yt-dlp 和 FFmpeg。中文标题需要本机中文字体，Linux 可安装 Noto Sans CJK。工作台复用当前 Chrome 的生成路径需要已配置的 Glance MCP 与 Chrome Bridge，环境面板可查看安装状态。命令行同时保留 Playwright 浏览器后端。
 
 ```sh
 ./setup.sh
