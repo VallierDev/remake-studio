@@ -9,10 +9,12 @@ const escapeHTML = (value) =>
   );
 const state = {
   page:
-    location.pathname === "/videos" ||
-    new URLSearchParams(location.search).get("view") === "viral"
-      ? "viral"
-      : "task",
+    location.pathname === "/settings"
+      ? "settings"
+      : location.pathname === "/videos" ||
+          new URLSearchParams(location.search).get("view") === "viral"
+        ? "viral"
+        : "task",
   runs: [],
   selected: null,
   detail: null,
@@ -27,6 +29,7 @@ const statuses = {
   queued: "等待中",
   failed: "失败",
   interrupted: "已中断",
+  cancelled: "已暂停",
   incomplete: "待继续",
 };
 const stages = [
@@ -83,10 +86,20 @@ function toast(message) {
   toast.timer = setTimeout(() => ($("#toast").hidden = true), 4500);
 }
 
-function showCreate() {
+async function showCreate() {
+  $("#create-form").reset();
+  $("#generation-fields").hidden = true;
+  $("#create-submit").textContent = "开始找片";
   $("#form-error").textContent = "";
   $("#create-dialog").showModal();
-  $("#create-form [name=keywords]").focus();
+  try {
+    const config = await api("/api/settings");
+    const topic = config.topics.find((item) => item.id === config.topic);
+    $("#form-direction").textContent = "当前内容方向 · " + topic.label;
+    $("#create-form [name=product]").value = topic.label;
+  } catch (error) {
+    $("#form-error").textContent = error.message;
+  }
 }
 
 function renderRuns() {
@@ -135,6 +148,7 @@ function renderProgress(detail) {
 async function selectRun(name) {
   state.page = "task";
   $("#viral-nav").classList.remove("active");
+  $("#settings-nav").classList.remove("active");
   $("#pipeline").hidden = false;
   $(".workspace-tabs").hidden = false;
   state.selected = name;
@@ -148,7 +162,7 @@ async function selectRun(name) {
 }
 
 function renderDetail() {
-  if (state.page === "viral") return;
+  if (state.page !== "task") return;
   const detail = state.detail;
   if (!detail) return;
   $("#task-title").textContent = detail.title;
@@ -323,6 +337,10 @@ async function refresh() {
       await loadVideos();
       return;
     }
+    if (state.page === "settings") {
+      await refreshUpdateStatus();
+      return;
+    }
     if (state.selected) {
       const detail = await api(
         "/api/runs/" + encodeURIComponent(state.selected),
@@ -351,6 +369,7 @@ function openVideoLibrary() {
   state.page = "viral";
   state.videoFingerprint = "";
   $("#viral-nav").classList.add("active");
+  $("#settings-nav").classList.remove("active");
   $("#task-title").textContent = "爆款视频列表";
   $("#task-subtitle").textContent =
     "自动汇总所有任务收录的视频，按播放量从高到低展示。";
@@ -361,6 +380,7 @@ function openVideoLibrary() {
   $(".workspace-tabs").hidden = true;
   history.replaceState(null, "", "/videos");
   $("#workspace").innerHTML = `
+    <div id="auto-update-bar" class="auto-update-bar"></div>
     <details class="library-filter-options"><summary>筛选与排序</summary>
     <div class="video-filters">
       <label class="field video-search"><span>搜索视频、作者或关键词</span><input id="video-query" placeholder="例如 christmas、红裙或作者名" data-video-filter></label>
@@ -399,6 +419,7 @@ async function loadVideos() {
   state.videoRequest = request;
   const result = await api("/api/videos?" + query);
   if (state.page !== "viral" || request !== state.videoRequest) return;
+  await refreshUpdateStatus();
   const fingerprint = JSON.stringify(result);
   if (fingerprint === state.videoFingerprint) return;
   state.videoFingerprint = fingerprint;
@@ -425,6 +446,142 @@ async function loadVideos() {
       .join("")}</tbody></table></div>`
     : '<div class="empty"><h2>没有符合条件的视频</h2><p>调整播放和互动门槛，或新建找片任务补充视频。</p></div>';
 }
+
+const readableTime = (value) =>
+  value
+    ? new Date(typeof value === "number" ? value * 1000 : value).toLocaleString(
+        "zh-CN",
+        {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        },
+      )
+    : "尚未完成首轮";
+
+async function refreshUpdateStatus() {
+  if (!["viral", "settings"].includes(state.page)) return;
+  const config = await api("/api/settings");
+  const running = ["queued", "running"].includes(config.current_job?.status);
+  const failed = ["failed", "interrupted"].includes(config.current_job?.status);
+  const topic =
+    config.topics.find((item) => item.id === config.topic)?.label || "";
+  const bar = $("#auto-update-bar");
+  if (bar)
+    bar.innerHTML = `
+    <div><strong>${running ? "正在更新列表" : failed ? "上次更新失败，请查看任务" : config.enabled ? "自动更新已开启" : "自动更新已暂停"}</strong>
+    <span>${escapeHTML(topic)} · 每 ${config.interval_hours} 小时 · 最近完成 ${readableTime(config.last_success)}</span></div>
+    <div class="actions"><button class="secondary" id="update-videos-now" ${running ? "disabled" : ""}>${running ? "正在更新" : "立即更新"}</button><button class="subtle" id="video-settings">设置</button></div>`;
+  const status = $("#settings-update-status");
+  if (status)
+    status.innerHTML = `
+    <div class="environment-row"><span>当前状态</span><strong>${running ? "正在找新视频并刷新数据" : failed ? "上次更新失败" : config.enabled ? "自动更新已开启" : "已暂停"}</strong></div>
+    <div class="environment-row"><span>最近完成</span><span>${readableTime(config.last_success)}</span></div>
+    <div class="environment-row"><span>下次计划</span><span>${config.enabled ? readableTime(config.next_run) : "已暂停"}</span></div>
+    ${config.current_job ? '<div class="environment-row"><span>最近更新任务</span><button class="source-task" data-run="' + escapeHTML(config.current_job.run) + '">查看进度与日志</button></div>' : ""}`;
+  return config;
+}
+
+async function openSettings() {
+  state.page = "settings";
+  $("#settings-nav").classList.add("active");
+  $("#viral-nav").classList.remove("active");
+  $("#task-title").textContent = "设置";
+  $("#task-subtitle").textContent =
+    "选好内容方向，工作台会自动维护你的视频列表。";
+  $("#breadcrumb").textContent = "设置";
+  $("#task-actions").innerHTML = "";
+  $("#pipeline").hidden = true;
+  $("#task-notice").hidden = true;
+  $(".workspace-tabs").hidden = true;
+  history.replaceState(null, "", "/settings");
+  $("#workspace").innerHTML = '<div class="loading">正在读取设置…</div>';
+  renderRuns();
+  try {
+    const config = await api("/api/settings");
+    if (state.page !== "settings") return;
+    $("#workspace").innerHTML = `
+      <div class="settings-layout"><form id="settings-form" class="settings-card">
+        <h2>视频列表自动更新</h2>
+        <label class="toggle-row"><span><strong>自动维护视频列表</strong><small>发现新视频，并刷新已收录视频的播放和互动数据</small></span><input name="enabled" type="checkbox" ${config.enabled ? "checked" : ""}></label>
+        <label class="field"><span>内容方向</span><select name="topic">${config.topics.map((item) => '<option value="' + item.id + '" ' + (config.topic === item.id ? "selected" : "") + ">" + item.label + "</option>").join("")}</select></label>
+        <p class="settings-hint">系统会按这个方向使用预设关键词，你可以直接浏览结果。</p>
+        <label class="field"><span>更新频率</span><select name="interval_hours">${[1, 6, 12, 24].map((value) => '<option value="' + value + '" ' + (config.interval_hours === value ? "selected" : "") + ">每 " + value + " 小时</option>").join("")}</select></label>
+        <p class="settings-hint">更新只找片和核实数据。视频生成由你在新建任务时启动。</p>
+        <div id="settings-error" class="form-error" role="alert"></div>
+        <div class="dialog-footer"><button class="primary" type="submit">保存设置</button></div>
+      </form>
+      <section class="settings-card"><h2>更新状态</h2><div id="settings-update-status"></div>
+        <p class="settings-hint">工作台服务运行时，关闭浏览器页面也会继续更新。电脑唤醒后会补跑到期任务。</p>
+        <button class="secondary" id="settings-update-now">立即更新一次</button>
+        <h2 class="settings-subheading">生成环境</h2>
+        <p class="settings-hint">在当前 Chrome 登录 Flow 后，点击连接，视频生成会复用这个账号。</p>
+        <button class="secondary" id="connect-current-chrome">连接当前 Chrome</button>
+        <p id="chrome-connect-status" class="settings-hint"></p>
+      </section></div>`;
+    $("#settings-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      const button = event.target.querySelector("button[type=submit]");
+      button.disabled = true;
+      $("#settings-error").textContent = "";
+      try {
+        await api("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled: form.has("enabled"),
+            topic: form.get("topic"),
+            interval_hours: Number(form.get("interval_hours")),
+          }),
+        });
+        await refreshUpdateStatus();
+        toast("设置已保存");
+      } catch (error) {
+        $("#settings-error").textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+    await refreshUpdateStatus();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+$("#settings-nav").addEventListener("click", openSettings);
+document.addEventListener("click", async (event) => {
+  if (event.target.closest("#video-settings")) openSettings();
+  const connect = event.target.closest("#connect-current-chrome");
+  if (connect) {
+    connect.disabled = true;
+    $("#chrome-connect-status").textContent = "正在连接当前 Chrome…";
+    try {
+      await api("/api/chrome/connect", { method: "POST" });
+      $("#chrome-connect-status").textContent = "当前 Chrome 已连接";
+    } catch (error) {
+      $("#chrome-connect-status").textContent = error.message;
+    } finally {
+      connect.disabled = false;
+    }
+  }
+  const button = event.target.closest(
+    "#update-videos-now,#settings-update-now",
+  );
+  if (button) {
+    button.disabled = true;
+    try {
+      await api("/api/videos/update", { method: "POST" });
+      await refreshUpdateStatus();
+      toast("更新已加入队列");
+    } catch (error) {
+      button.disabled = false;
+      toast(error.message);
+    }
+  }
+});
 
 $("#viral-nav").addEventListener("click", openVideoLibrary);
 document.addEventListener("input", (event) => {
@@ -496,6 +653,7 @@ $("#create-form").addEventListener("submit", async (event) => {
     });
     $("#create-dialog").close();
     state.page = "task";
+    $("#settings-nav").classList.remove("active");
     $("#viral-nav").classList.remove("active");
     $("#pipeline").hidden = false;
     $(".workspace-tabs").hidden = false;
@@ -541,5 +699,6 @@ $("#environment-button").addEventListener("click", async () => {
   }
 });
 if (state.page === "viral") openVideoLibrary();
+if (state.page === "settings") openSettings();
 refresh();
 setInterval(refresh, 3500);

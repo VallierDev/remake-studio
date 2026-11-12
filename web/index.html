@@ -26,6 +26,9 @@
         <nav id="run-list" aria-label="任务列表">
           <div class="loading">正在读取任务…</div>
         </nav>
+        <button id="settings-nav" class="settings-nav">
+          设置<span aria-hidden="true">⚙</span>
+        </button>
         <button id="environment-button" class="environment">
           <span class="status-light"></span><span>本机环境</span
           ><span class="env-arrow">↗</span>
@@ -80,7 +83,7 @@
         <div class="dialog-header">
           <div>
             <h2>新建视频任务</h2>
-            <p>输入你想找的内容，工作台会自动筛选参考视频。</p>
+            <p>默认按设置中的内容方向找片，可直接开始。</p>
           </div>
           <button
             type="button"
@@ -105,16 +108,21 @@
             ></label
           >
         </div>
-        <label class="field"
-          ><span>搜索关键词</span
-          ><textarea
-            name="keywords"
-            required
-            maxlength="500"
-            rows="2"
-            placeholder='例如 "christmas party outfit" red dress'
-          ></textarea>
-        </label>
+        <p class="form-direction" id="form-direction">
+          按设置中的内容方向自动找片
+        </p>
+        <details class="task-keyword-options">
+          <summary>自定义关键词（可选）</summary>
+          <label class="field"
+            ><span>补充关键词</span
+            ><textarea
+              name="keywords"
+              maxlength="500"
+              rows="2"
+              placeholder="留空时自动使用预设关键词"
+            ></textarea>
+          </label>
+        </details>
         <div class="field-row">
           <label class="field"
             ><span>最低播放量</span
@@ -209,9 +217,7 @@
       </div>
       <div id="environment-details"></div>
       <p class="environment-help">
-        首次使用生成服务时，在终端运行
-        <code>.venv/bin/python remake.py --flow2api-use-chrome</code>，随后保持
-        Chrome 与 Glance Bridge 连接。
+        在“设置”中连接当前 Chrome，并保持 Chrome 与 Glance Bridge 连接。
       </p>
     </dialog>
     <dialog id="image-dialog">

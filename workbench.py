@@ -27,6 +27,11 @@ STATE = ROOT / ".workbench"
 SLUG = re.compile(r"[A-Za-z0-9_-]+")
 MODELS = {"omni-1.2-flash-8s-portrait", "veo-3.1-fast-8s-portrait"}
 stop_worker = threading.Event()
+TOPICS = {
+    "christmas": {"label": "圣诞女装", "queries": ['"christmas party outfit" red dress', '"holiday outfit" sequin dress']},
+    "party": {"label": "派对穿搭", "queries": ['"party outfit" dress', '"evening dress" outfit TikTok']},
+    "fashion": {"label": "女装热门", "queries": ['"women outfit" dress TikTok', '"fashion haul" dress TikTok']},
+}
 
 
 def read_json(path, default=None):
@@ -56,10 +61,15 @@ def initialize():
           status TEXT NOT NULL, options TEXT NOT NULL, resume INTEGER DEFAULT 0,
           pid INTEGER, identity TEXT, exit_code INTEGER
         )""")
+        db.execute("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL)")
+        db.execute("INSERT OR IGNORE INTO settings(id,data) VALUES(1,?)", (json.dumps({
+            "enabled": True, "topic": "christmas", "interval_hours": 6,
+            "next_run": time.time(), "last_job": None, "last_success": None,
+        }),))
 
 
 class TaskInput(BaseModel):
-    keywords: str = Field(min_length=1, max_length=500)
+    keywords: str = Field(default="", max_length=500)
     product: str = Field(default="圣诞派对穿搭", min_length=1, max_length=200)
     caption: str = Field(default="", max_length=60)
     mode: str = Field(pattern="^(scout|generate)$", default="scout")
@@ -76,7 +86,11 @@ def command(run, options, resume=False):
     if resume:
         cmd.extend(["--resume", "--flow"])
     else:
-        cmd.extend(["--query", options["keywords"], "--product", options["product"],
+        for query in options.get("queries") or [options["keywords"]]:
+            cmd.extend(["--query", query])
+        if options.get("seed_file"):
+            cmd.extend(["--seed-file", options["seed_file"]])
+        cmd.extend(["--product", options["product"],
                     "--min-views", str(options["min_views"]), "--min-engagement",
                     str(options["min_engagement"]), "--limit", str(options["limit"]),
                     "--sort", options["sort"]])
@@ -103,6 +117,7 @@ def log_path(run):
 
 def worker():
     while not stop_worker.is_set():
+        schedule_update()
         with database() as db:
             row = db.execute("SELECT * FROM jobs WHERE status='running' ORDER BY created LIMIT 1").fetchone()
             if row is None:
@@ -137,6 +152,10 @@ def worker():
         with database() as db:
             db.execute("UPDATE jobs SET status=?,exit_code=?,updated=? WHERE run=?",
                        (status, code, now(), row["run"]))
+            if options.get("scheduled") and status == "completed":
+                config = json.loads(db.execute("SELECT data FROM settings WHERE id=1").fetchone()[0])
+                config["last_success"] = now()
+                db.execute("UPDATE settings SET data=? WHERE id=1", (json.dumps(config),))
 
 
 def now():
@@ -235,6 +254,7 @@ async def local_origin(request: Request, call_next):
 
 @app.get("/")
 @app.get("/videos")
+@app.get("/settings")
 def index():
     return FileResponse(ROOT / "web/index.html")
 
@@ -263,10 +283,7 @@ def runs():
     return sorted((entry for entry in entries if entry), key=lambda item: item["created"], reverse=True)
 
 
-@app.get("/api/videos")
-def videos(q: str = Query(default="", max_length=500), min_views: int = Query(default=0, ge=0),
-           min_engagement: float = Query(default=0, ge=0, allow_inf_nan=False),
-           sort: str = Query(default="views", pattern="^(views|engagement)$")):
+def collected_videos():
     collected = {}
     for folder in sorted(RUNS.iterdir()):
         if not folder.is_dir() or folder.is_symlink() or not SLUG.fullmatch(folder.name):
@@ -288,6 +305,91 @@ def videos(q: str = Query(default="", max_length=500), min_views: int = Query(de
                     "saves", "duration", "upload_date", "weighted_engagement_rate")}
                 collected[identity].update(source_run=folder.name, checked_at=measured)
             collected[identity]["queries"] = sorted(queries)
+    return collected
+
+
+class UpdateSettings(BaseModel):
+    enabled: bool
+    topic: str = Field(pattern="^(christmas|party|fashion)$")
+    interval_hours: int = Field(ge=1, le=168)
+
+
+def settings_snapshot():
+    with database() as db:
+        config = json.loads(db.execute("SELECT data FROM settings WHERE id=1").fetchone()[0])
+        row = db.execute("SELECT run,status,updated FROM jobs WHERE run=?", (config.get("last_job"),)).fetchone()
+    return {**config, "topics": [{"id": key, "label": value["label"]} for key, value in TOPICS.items()],
+            "current_job": dict(row) if row else None}
+
+
+def schedule_update(force=False):
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        config = json.loads(db.execute("SELECT data FROM settings WHERE id=1").fetchone()[0])
+        active = next((row for row in db.execute("SELECT run,options FROM jobs WHERE status IN ('queued','running')")
+                       if json.loads(row["options"]).get("scheduled")), None)
+        if active:
+            return active["run"] if force else None
+        if not force and (not config["enabled"] or config["next_run"] > time.time()):
+            return None
+        name = "auto-" + datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
+        topic = TOPICS[config["topic"]]
+        options = TaskInput(keywords=topic["queries"][0], product="自动更新 · " + topic["label"],
+                            mode="scout", min_views=0, min_engagement=0, limit=12).model_dump()
+        options.update(queries=topic["queries"], scheduled=True)
+        existing = sorted(collected_videos().values(), key=lambda row: row["checked_at"])
+        if existing:
+            seed = STATE / (name + "-existing.txt")
+            seed.write_text("\n".join(row["url"] for row in existing[:100]) + "\n")
+            options["seed_file"] = str(seed)
+        db.execute("INSERT INTO jobs(run,created,updated,status,options) VALUES(?,?,?,?,?)",
+                   (name, now(), now(), "queued", json.dumps(options)))
+        config.update(last_job=name, next_run=time.time() + config["interval_hours"] * 3600)
+        db.execute("UPDATE settings SET data=? WHERE id=1", (json.dumps(config),))
+        return name
+
+
+@app.get("/api/settings")
+def get_settings():
+    return settings_snapshot()
+
+
+@app.put("/api/settings")
+def set_settings(value: UpdateSettings):
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        config = json.loads(db.execute("SELECT data FROM settings WHERE id=1").fetchone()[0])
+        changed = value.topic != config["topic"] or value.enabled and not config["enabled"]
+        config.update(value.model_dump())
+        config["next_run"] = time.time() if changed else time.time() + value.interval_hours * 3600
+        db.execute("UPDATE settings SET data=? WHERE id=1", (json.dumps(config),))
+        if not value.enabled:
+            for row in db.execute("SELECT run,options FROM jobs WHERE status='queued'").fetchall():
+                if json.loads(row["options"]).get("scheduled"):
+                    db.execute("UPDATE jobs SET status='cancelled',updated=? WHERE run=?", (now(), row["run"]))
+    return settings_snapshot()
+
+
+@app.post("/api/chrome/connect")
+def connect_current_chrome():
+    from local_flow2api import use_current_chrome
+    try:
+        use_current_chrome()
+    except (OSError, ValueError) as error:
+        raise HTTPException(400, str(error)) from None
+    return {"connected": True}
+
+
+@app.post("/api/videos/update", status_code=202)
+def update_videos():
+    return {"run": schedule_update(force=True)}
+
+
+@app.get("/api/videos")
+def videos(q: str = Query(default="", max_length=500), min_views: int = Query(default=0, ge=0),
+           min_engagement: float = Query(default=0, ge=0, allow_inf_nan=False),
+           sort: str = Query(default="views", pattern="^(views|engagement)$")):
+    collected = collected_videos()
     needle = q.strip().casefold()
     selected = [row for row in collected.values()
                 if (row.get("views") or 0) >= min_views
@@ -335,12 +437,18 @@ def log(name: str):
 
 @app.post("/api/tasks", status_code=202)
 def create_task(options: TaskInput):
-    if options.model not in MODELS or not options.keywords.strip() or not options.product.strip():
-        raise HTTPException(422, "检查关键词、商品描述和模型")
+    if options.model not in MODELS or not options.product.strip():
+        raise HTTPException(422, "检查内容方向、商品描述和模型")
+    data = options.model_dump()
+    if not options.keywords.strip():
+        config = settings_snapshot()
+        topic = TOPICS[config["topic"]]
+        data["keywords"] = topic["queries"][0]
+        data["queries"] = topic["queries"]
     name = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
     with database() as db:
         db.execute("INSERT INTO jobs(run,created,updated,status,options) VALUES(?,?,?,?,?)",
-                   (name, now(), now(), "queued", options.model_dump_json()))
+                   (name, now(), now(), "queued", json.dumps(data)))
     return {"run": name}
 
 
