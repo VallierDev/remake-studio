@@ -1,16 +1,16 @@
-# Remake Studio
+# Remake Studio · TikTok 爆款视频查找器
 
-从关键词找到 TikTok 参考视频，用 REA-Video 拆解镜头，再用 Google Flow 生成、下载并验收一条原创竖屏视频。也可以单独找片、拆片，或导入已有视频。
+输入商品名称，搜索相关 TikTok 视频，按播放量和互动数据筛选参考素材。选好视频后，复制链接到 YouArt Desktop 的“爆款复刻 / Viral Remake”入口，上传自己的商品图并说明修改目标。
 
-Find TikTok references from keywords, break down shots with REA-Video, then generate and validate an original vertical clip through Google Flow. The CLI runs locally. Flow runs in the browser.
+Search TikTok reference videos by product keywords, compare views and engagement, and copy a selected video link into YouArt Desktop's Viral Remake workflow.
 
-![本地视频工作台](docs/workbench.png)
+![TikTok 视频查找工作台](docs/workbench.png)
 
-## 找片版 · 搭配 YouArt Desktop
+## 安装与启动
 
-面向教程读者的找片版负责搜索商品、核实播放与互动、定期更新列表。找到参考视频后，点击“复制链接”，粘贴到 YouArt Desktop 的“爆款复刻 / Viral Remake”入口，上传商品图并说明要改成什么。
+需要 macOS 或 Linux，以及 Git 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)。安装器会准备 Python 环境和找片依赖。
 
-先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)，下载 [源码 ZIP](https://github.com/VallierDev/remake-studio/archive/refs/heads/codex/open-source.zip) 并解压，或克隆仓库，在源码目录运行：
+下载 [源码 ZIP](https://github.com/VallierDev/remake-studio/archive/refs/heads/codex/open-source.zip) 并解压，或克隆仓库，然后在项目目录运行：
 
 ```sh
 git clone https://github.com/VallierDev/remake-studio.git
@@ -19,115 +19,42 @@ cd remake-studio
 ./start-finder.sh
 ```
 
-打开 `http://127.0.0.1:18782`，可直接搜索“圣诞挂件”“圣诞树”“圣诞晚礼服”。每条视频有播放量、互动数据及“复制链接”按钮。找片版安装 Python Web 服务和 yt-dlp，商品检索走公开索引与 TikTok 回源核实。YouArt Desktop 可从 [官方下载页](https://youart.ai/download) 安装，视频制作在桌面端完成。
+浏览器打开 `http://127.0.0.1:18782`。
 
-## 工作台 / Workbench
+## 查找参考视频
 
-安装后运行 `./start.sh`，或在 macOS 双击 `打开工作台.command`。工作台默认打开在 `http://127.0.0.1:18782`。
+1. 输入商品名称，例如“圣诞挂件”“圣诞树”“圣诞晚礼服”，点击“搜索视频”。
+2. 查看真实视频的播放量、点赞和加权互动率，点击标题打开原片。
+3. 按需调整播放量、互动率和排序条件。
+4. 点击“复制链接”，进入 YouArt Desktop 的“爆款复刻”入口。
 
-- 默认首页为爆款视频列表。搜索商品名称，会联网发现并核实相关 TikTok 视频。
-- 点击某条视频的“复刻”，锁定这条原片，自动进入下载、REA 拆解、分镜、Flow 生成、字幕与验收。点击会使用 Flow 账号积分。
-- 支持中文商品检索，内置圣诞挂件、圣诞树和圣诞晚礼服等常用商品词。搜索结果会加入列表。
-- 查看历史任务、候选数据、REA 抽帧、分镜和运行日志。
-- 在“爆款视频”页跨任务去重汇总视频，搜索作者与关键词，按播放量或互动率筛选排序，并回到来源任务。
-- 生成任务排队执行，沿用项目内 Flow2API 和当前 Chrome 登录态。
-- 预览与下载字幕成片。中断后保留任务记录与生成检查点。
+可向 YouArt 提出具体要求：
 
-首次完整安装可运行 `./setup.sh --all`，再按下方说明绑定当前 Chrome。
+> 参考这条视频的开场、运镜和剪辑节奏，改成我的圣诞挂件。先展示挂件细节，再拍挂上圣诞树后的效果。使用新的场景和文案，做一条适合 TikTok 的竖屏带货视频。
 
-## 列表自动更新
+从 [YouArt 官方下载页](https://youart.ai/download) 安装桌面应用。
 
-在 `/settings` 设置内容方向、更新频率和暂停开关。首次默认为圣诞女装，每 6 小时自动更新，并立即执行一轮。系统在后台使用预设关键词发现新视频，每轮也会回源刷新最多 100 条较旧的已收录视频。更新只执行找片与数据核实。
+## 列表与自动更新
 
-列表页可查看更新状态或立即更新。任务与计划保存在本机 SQLite 中，关闭浏览器页面后仍由工作台服务执行。工作台服务需要保持运行，电脑唤醒或服务重启后会补跑到期任务。生成账号可直接在设置页点击“连接当前 Chrome”。
+列表汇总已收录视频并去重，保留最近一次核实的播放与互动数据。搜索会从公开索引发现 TikTok 链接，再向 TikTok 回源核实视频和计数。结果受索引覆盖、网络和平台可用性影响。
 
-## 安装 / Setup
+在“设置”选择内容方向、更新频率或暂停更新。默认方向为圣诞女装，每 6 小时更新。工作台服务运行时，关闭浏览器页面后仍会继续执行到期任务。
 
-需要 macOS 或 Linux、Git、uv、Python 3.13、Google Chrome、yt-dlp 和 FFmpeg。中文标题需要本机中文字体，Linux 可安装 Noto Sans CJK。工作台复用当前 Chrome 的生成路径需要已配置的 Glance MCP 与 Chrome Bridge，环境面板可查看安装状态。命令行同时保留 Playwright 浏览器后端。
+加权互动率为（点赞 + 2×评论 + 3×分享 + 2×收藏）/ 播放量。缺失项以空值保存，计算时按 0。
 
-```sh
-./setup.sh
-.venv/bin/python remake.py --flow-login
-```
+## 本地数据
 
-首次在打开的独立 Chrome 窗口登录自己的 Google Flow 账号。之后使用同一份本地浏览器配置。项目不会读取其他 Chrome 配置的密码或 Cookie。启用可选的 `--flow-browser glance` 时，使用你已配置的 Glance Chrome Bridge 会话。
+搜索结果与原始计数保存在 `runs/`，队列和设置保存在 `.workbench/`。这些目录由 Git 忽略。
 
-## 运行 / Usage
+## 开源与源码打包
 
-```sh
-.venv/bin/python remake.py --run holiday-demo \
-  --query '"christmas party outfit" red dress' --limit 16 \
-  --min-views 50000 --min-engagement 2 --sort views \
-  --require christmas --require dress \
-  --product '公司聖誕派對女裝，主款酒紅亮片裙' \
-  --flow --max-flow-credits 24
-```
+本项目采用 [MIT 许可证](LICENSE)。第三方组件见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
-- 加 `--scout-only` 时只找片和排序，并移除 `--flow`。`--url` 和 `--seed-file` 也接受明确的公开候选，`--file` 可拆本地视频。
-- `--query` 从公开索引发现 TikTok 链接，再向 TikTok 核实 ID、播放量、互动和视频轨。索引覆盖及平台可用性会影响结果。公开互动数据适用于筛参考片。
-- 加权互动率为（赞 + 2×评论 + 3×分享 + 2×收藏）/ 播放。缺失项在数据里保留空值，计算时按 0。`--min-engagement 2` 表示 2%。`--sort engagement` 按加权互动率排，`--sort views` 按播放量排。
-- 默认分镜基于 REA 切点和 OCR。指定 `--vision ollama --vision-model <本地视觉模型>` 时，将 REA 分镜图交给本机 Ollama 识别画面。已有 Glance 的用户可指定 `--vision glance`，这会把分镜图和分析问题交给 Glance 配置的视觉服务。
-- `--flow` 明确启用 Flow 生成。一轮只提交一条 9:16、720p、8 秒视频，提交前核对页面价格，超过 `--max-flow-credits` 或读不到价格会停止。Flow 网页界面、登录权限、地区和额度会影响可用性。
+提交源码改动后运行 `./package.sh`，会在 `dist/` 导出当前提交的源码 ZIP。
 
-如果生成或下载中断，使用原任务名恢复。若原命令指定了 `--flow-browser glance`、自定义浏览器配置或字体，恢复时也带上相同参数。已提交的任务会重新检查原项目，避免重复生成。
-
-```sh
-.venv/bin/python remake.py --run holiday-demo --flow --resume
-```
-
-输出保存在 `runs/<运行名>/`。从 `candidates.json` 查看筛选结果，从 `rea/report.html` 查看切点和包装分析，从 `storyboard.json` 和 `flow-prompt.txt` 查看制作计划。`flow-output.mp4` 为 Flow 原片，`final.mp4` 为带标题且通过解码检查的成片，`preview.jpg` 为逐秒抽帧。字幕默认使用分镜标题，可用 `--caption` 和 `--font` 覆盖。YouArt 演示使用单独生成的 `youart-brief.md`。
-
-
-## 项目内 Flow2API
-
-安装项目自己管理的 Flow2API 运行时，并登录 Google Flow：
-
-```sh
-./setup.sh --flow2api
-.venv/bin/python remake.py --flow2api-use-chrome
-.venv/bin/python remake.py --flow2api-check
-```
-
-安装器从公开上游下载固定版本到 `vendor/flow2api`，依赖位于 `.flow2api-venv`。启动时生成随机的本地 API 和管理员凭据，配置、数据库、缓存和登录浏览器放在忽略提交的 `.flow2api/`。服务只监听 `127.0.0.1:18781`，生成前会自动检查和启动它。
-
-默认复用 Glance Chrome Bridge 连接的当前 Chrome。在 Chrome 打开并登录 `flow.google.com`，运行 `--flow2api-use-chrome` 后，项目内服务会导入这个会话。生成时，本机 WebSocket 桥接通过同一浏览器完成 Flow 所需的站点验证。每轮请求结束后自动关闭本机桥接进程，保留浏览器标签页。Google 出现交互式验证码或登录提示时需要人在浏览器处理。
-
-`--chrome-profile` 可指定 Glance 的浏览器配置名，默认是 `default`。`--flow2api-login` 保留为独立 Chrome 登录工具。
-
-```sh
-.venv/bin/python remake.py --flow2api-service status
-.venv/bin/python remake.py --flow2api-service stop
-.venv/bin/python remake.py --flow2api-service start
-```
-
-从关键词到字幕成片可直接运行：
-
-```sh
-.venv/bin/python remake.py --run christmas-demo \
-  --query '"christmas party outfit" red dress' --limit 16 \
-  --min-views 50000 --min-engagement 2 --sort views \
-  --require christmas --require dress \
-  --product '聖誕派對穿搭，酒紅亮片連衣裙' \
-  --caption 'POV：公司的聖誕派對' \
-  --flow --flow-backend flow2api --flow2api-model omni-1.2-flash-8s-portrait
-```
-
-生成后会逐秒检查大块纯色边带，并将检查结果写进 `layout-check.json`。检测不通过时保留原片和任务记录，停止交付。标题直接叠加在实际画面上，`--caption` 可写自然的观众用语。
-
-在生成命令末尾加 `--flow --flow-backend flow2api`。默认模型是 `veo-3.1-fast-8s-portrait`，可用 `--flow2api-model omni-1.2-flash-8s-portrait` 等模型覆盖。它和网页后端共享分镜、下载、字幕、成片验收。网关接口未返回提交前的积分报价，`--max-flow-credits` 仅约束网页后端。
-
-已返回视频地址而下载中断时，带 `--flow-backend flow2api --resume` 继续下载。生成流断开且尚未返回地址时，需要先查看本地任务日志，避免重复提交。流式接口目前没有返回可用于客户端恢复轮询的任务 ID。
-
-需要连接自行部署的其他兼容网关时，显式设置 `--flow2api-url` 和本机环境变量 `FLOW2API_API_KEY`。运行产物中的 `flow2api-job.json` 保存当前任务进度。
-
-本项目采用 [MIT 许可证](LICENSE)。第三方组件见 [THIRD_PARTY.md](THIRD_PARTY.md)。本地运行产物、浏览器配置和下载媒体由 Git 忽略。
-
-## 测试与源码打包
+开发检查：
 
 ```sh
 uv pip install --python .venv/bin/python -r requirements-dev.txt
 .venv/bin/python -m unittest discover -s tests -v
-./package.sh
 ```
-
-打包器从当前 Git 提交导出 `dist/remake-studio-<提交号>.zip`。压缩包包含源码、界面、安装与启动脚本、许可证及第三方说明。账号、浏览器配置、视频和本地数据库由忽略规则排除。
