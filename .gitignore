@@ -15,3 +15,5 @@ __pycache__/
 .DS_Store
 /.flow2api/
 /.flow2api-venv/
+/.workbench/
+/dist/

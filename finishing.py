@@ -97,4 +97,7 @@ def finish(run, raw, headline, font):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(final),
                     "-vf", "fps=1,scale=180:-2,tile=4x2", "-frames:v", "1", str(run / "preview.jpg")],
                    check=True, timeout=30)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "0.1", "-i", str(final),
+                    "-vf", "scale=360:-2", "-frames:v", "1", str(run / "poster.jpg")],
+                   check=True, timeout=30)
     return {"file": final.name, **result}

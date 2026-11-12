@@ -3,6 +3,12 @@ set -eu
 cd "$(dirname "$0")"
 mkdir -p vendor
 
+if [ "${1:-}" = "--all" ]; then
+    sh "$0"
+    sh "$0" --flow2api
+    exit 0
+fi
+
 if [ "${1:-}" = "--flow2api" ]; then
     directory=vendor/flow2api
     revision=2cf700d1c6f36348b37405dbc0c9a2d5397338e4
@@ -40,5 +46,5 @@ checkout vendor/tiktok-viral-ai-automation https://github.com/abuzar561/tiktok-v
 
 [ -x .venv/bin/python ] || uv venv --python 3.13 .venv
 [ -x .scout-venv/bin/python ] || uv venv --python 3.13 .scout-venv
-uv pip install --python .venv/bin/python './vendor/rea-video-sparse[ocr,asr]' 'playwright>=1.52,<2'
+uv pip install --python .venv/bin/python './vendor/rea-video-sparse[ocr,asr]' -r requirements.txt
 uv pip install --python .scout-venv/bin/python -r vendor/tiktok-viral-ai-automation/requirements.txt

@@ -1,8 +1,21 @@
-# TikTok Remake
+# Remake Studio
 
 从关键词找到 TikTok 参考视频，用 REA-Video 拆解镜头，再用 Google Flow 生成、下载并验收一条原创竖屏视频。也可以单独找片、拆片，或导入已有视频。
 
 Find TikTok references from keywords, break down shots with REA-Video, then generate and validate an original vertical clip through Google Flow. The CLI runs locally. Flow runs in the browser.
+
+![本地视频工作台](docs/workbench.png)
+
+## 工作台 / Workbench
+
+安装后运行 `./start.sh`，或在 macOS 双击 `打开工作台.command`。工作台默认打开在 `http://127.0.0.1:18782`。
+
+- 输入关键词、最低播放与互动门槛，选择只找参考或生成成片。
+- 查看历史任务、候选数据、REA 抽帧、分镜和运行日志。
+- 生成任务排队执行，沿用项目内 Flow2API 和当前 Chrome 登录态。
+- 预览与下载字幕成片。中断后保留任务记录与生成检查点。
+
+首次完整安装可运行 `./setup.sh --all`，再按下方说明绑定当前 Chrome。
 
 ## 安装 / Setup
 
@@ -84,3 +97,13 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 需要连接自行部署的其他兼容网关时，显式设置 `--flow2api-url` 和本机环境变量 `FLOW2API_API_KEY`。运行产物中的 `flow2api-job.json` 保存当前任务进度。
 
 本项目采用 [MIT 许可证](LICENSE)。第三方组件见 [THIRD_PARTY.md](THIRD_PARTY.md)。本地运行产物、浏览器配置和下载媒体由 Git 忽略。
+
+## 测试与源码打包
+
+```sh
+uv pip install --python .venv/bin/python -r requirements-dev.txt
+.venv/bin/python -m unittest discover -s tests -v
+./package.sh
+```
+
+打包器从当前 Git 提交导出 `dist/remake-studio-<提交号>.zip`。压缩包包含源码、界面、安装与启动脚本、许可证及第三方说明。账号、浏览器配置、视频和本地数据库由忽略规则排除。
