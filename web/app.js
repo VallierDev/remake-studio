@@ -351,9 +351,9 @@ function openVideoLibrary() {
   state.page = "viral";
   state.videoFingerprint = "";
   $("#viral-nav").classList.add("active");
-  $("#task-title").textContent = "爆款视频库";
+  $("#task-title").textContent = "爆款视频列表";
   $("#task-subtitle").textContent =
-    "汇总各次搜索中核实过的视频，保留最新一次的播放和互动数据。";
+    "自动汇总所有任务收录的视频，按播放量从高到低展示。";
   $("#breadcrumb").textContent = "爆款视频";
   $("#task-actions").innerHTML = "";
   $("#pipeline").hidden = true;
@@ -361,12 +361,14 @@ function openVideoLibrary() {
   $(".workspace-tabs").hidden = true;
   history.replaceState(null, "", "/videos");
   $("#workspace").innerHTML = `
+    <details class="library-filter-options"><summary>筛选与排序</summary>
     <div class="video-filters">
       <label class="field video-search"><span>搜索视频、作者或关键词</span><input id="video-query" placeholder="例如 christmas、红裙或作者名" data-video-filter></label>
-      <label class="field"><span>最低播放量</span><input id="video-min-views" type="number" value="50000" min="0" step="10000" data-video-filter></label>
-      <label class="field"><span>最低互动率 %</span><input id="video-min-rate" type="number" value="2" min="0" step="0.5" data-video-filter></label>
+      <label class="field"><span>最低播放量</span><input id="video-min-views" type="number" value="0" min="0" step="10000" data-video-filter></label>
+      <label class="field"><span>最低互动率 %</span><input id="video-min-rate" type="number" value="0" min="0" step="0.5" data-video-filter></label>
       <label class="field"><span>排序</span><select id="video-sort" data-video-filter><option value="views">播放量从高到低</option><option value="engagement">互动率从高到低</option></select></label>
     </div>
+    </details>
     <p id="video-library-count" class="library-count">正在汇总已核实视频…</p>
     <div id="video-library-results"></div>`;
   renderRuns();
@@ -401,11 +403,13 @@ async function loadVideos() {
   if (fingerprint === state.videoFingerprint) return;
   state.videoFingerprint = fingerprint;
   $("#video-library-count").textContent =
-    "已核实 " +
-    result.verified_total +
-    " 条独立视频，当前筛选 " +
-    result.total +
-    " 条";
+    result.total === result.verified_total
+      ? "全部 " + result.verified_total + " 条已收录视频"
+      : "已收录 " +
+        result.verified_total +
+        " 条，筛选后 " +
+        result.total +
+        " 条";
   $("#video-library-results").innerHTML = result.videos.length
     ? `
     <div class="table-wrap"><table><thead><tr><th>视频 / 作者</th><th>播放</th><th>点赞</th><th>加权互动率</th><th>数据更新</th><th>来源</th></tr></thead><tbody>

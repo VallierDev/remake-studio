@@ -264,8 +264,8 @@ def runs():
 
 
 @app.get("/api/videos")
-def videos(q: str = Query(default="", max_length=500), min_views: int = Query(default=50000, ge=0),
-           min_engagement: float = Query(default=2, ge=0, allow_inf_nan=False),
+def videos(q: str = Query(default="", max_length=500), min_views: int = Query(default=0, ge=0),
+           min_engagement: float = Query(default=0, ge=0, allow_inf_nan=False),
            sort: str = Query(default="views", pattern="^(views|engagement)$")):
     collected = {}
     for folder in sorted(RUNS.iterdir()):

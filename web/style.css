@@ -1153,3 +1153,19 @@ dialog::backdrop {
     grid-column: 1 / -1;
   }
 }
+
+.library-filter-options {
+  margin: 0 0 20px;
+  padding: 0 0 15px;
+  border-bottom: 1px solid var(--line);
+}
+.library-filter-options summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  width: fit-content;
+}
+.library-filter-options .video-filters {
+  border-top: 0;
+  padding-top: 18px;
+}
