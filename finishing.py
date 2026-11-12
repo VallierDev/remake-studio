@@ -21,6 +21,35 @@ def verify(path):
     return {"width": w, "height": h, "duration": seconds}
 
 
+def inspect_frame_layout(path):
+    import cv2
+    import numpy as np
+
+    capture = cv2.VideoCapture(str(path))
+    flagged = []
+    try:
+        for second in range(8):
+            capture.set(cv2.CAP_PROP_POS_MSEC, second * 1000)
+            ok, frame = capture.read()
+            if not ok:
+                continue
+            small = cv2.resize(frame, (180, 320))
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY).astype(float)
+            # A generated title panel has a flat large band and a hard seam
+            # spanning almost the entire width. Inspect both top and bottom.
+            for side, view in (("top", gray), ("bottom", gray[::-1])):
+                differences = np.abs(np.diff(view, axis=0))
+                row = int(np.argmax(differences[40:116].mean(axis=1))) + 40
+                edge = differences[row]
+                if (edge.mean() > 20 and (edge > 12).mean() > 0.8
+                        and np.std(view[:row], axis=1).mean() < 7):
+                    flagged.append({"second": second, "side": side,
+                                    "band_fraction": round((row + 1) / 320, 3)})
+    finally:
+        capture.release()
+    return {"large_flat_bands": flagged}
+
+
 def font_path(text, override):
     if override:
         return str(override)
@@ -39,6 +68,10 @@ def finish(run, raw, headline, font):
     width, height = spec["width"], spec["height"]
     if abs(width / height - 9 / 16) > 0.025 or abs(spec["duration"] - 8) > 1:
         raise ValueError("Flow 输出没有达到 9:16、约 8 秒的交付规格")
+    layout = inspect_frame_layout(raw)
+    (run / "layout-check.json").write_text(json.dumps(layout, indent=2) + "\n")
+    if layout["large_flat_bands"]:
+        raise ValueError("生成视频出现大块纯色留白，未通过画面验收。查看 layout-check.json。")
     if not headline.strip():
         raise ValueError("标题为空")
     overlay = run / "caption.png"

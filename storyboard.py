@@ -98,6 +98,6 @@ Product or topic: {product}.
 {script}
 {f'Adapt these camera and editing cues from the reference: {style}' if style else ''}
 {notes}
-Use original people, wardrobe, footage and setting. Keep the product consistent and show it clearly. Follow the specified cuts, keep the upper center clear for a title added separately, and render no on-screen text or logos. Use original ambience without recognizable music."""
+Use original people, wardrobe, footage and setting. Keep the product consistent and show it clearly. Compose continuous edge-to-edge 9:16 footage in every shot, including close-ups: the live scene fills the entire canvas. Keep the specified cuts and render without reserved title space, solid-color panels, borders, letterboxing, on-screen text or logos. A title will be overlaid on the actual scene during editing. Use original ambience without recognizable music."""
     (run / "flow-prompt.txt").write_text(prompt + "\n")
     return plan

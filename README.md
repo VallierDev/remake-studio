@@ -63,6 +63,20 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 .venv/bin/python remake.py --flow2api-service start
 ```
 
+从关键词到字幕成片可直接运行：
+
+```sh
+.venv/bin/python remake.py --run christmas-demo \
+  --query '"christmas party outfit" red dress' --limit 16 \
+  --min-views 50000 --min-engagement 2 --sort views \
+  --require christmas --require dress \
+  --product '聖誕派對穿搭，酒紅亮片連衣裙' \
+  --caption 'POV：公司的聖誕派對' \
+  --flow --flow-backend flow2api --flow2api-model omni-1.2-flash-8s-portrait
+```
+
+生成后会逐秒检查大块纯色边带，并将检查结果写进 `layout-check.json`。检测不通过时保留原片和任务记录，停止交付。标题直接叠加在实际画面上，`--caption` 可写自然的观众用语。
+
 在生成命令末尾加 `--flow --flow-backend flow2api`。默认模型是 `veo-3.1-fast-8s-portrait`，可用 `--flow2api-model omni-1.2-flash-8s-portrait` 等模型覆盖。它和网页后端共享分镜、下载、字幕、成片验收。网关接口未返回提交前的积分报价，`--max-flow-credits` 仅约束网页后端。
 
 已返回视频地址而下载中断时，带 `--flow-backend flow2api --resume` 继续下载。生成流断开且尚未返回地址时，需要先查看本地任务日志，避免重复提交。流式接口目前没有返回可用于客户端恢复轮询的任务 ID。
