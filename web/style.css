@@ -1349,3 +1349,116 @@ dialog::backdrop {
     flex-wrap: wrap;
   }
 }
+
+.youart-guide-dialog {
+  width: min(980px, calc(100vw - 32px));
+}
+.youart-home-figure {
+  position: relative;
+  margin: 0 0 22px;
+  background: #151515;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.youart-home-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.youart-entry-highlight {
+  position: absolute;
+  left: 25.4%;
+  top: 41.3%;
+  width: 9%;
+  height: 5.8%;
+  border: 3px solid #ffb65a;
+  border-radius: 7px;
+  box-shadow: 0 0 0 4px #ffb65a20;
+}
+.youart-home-figure figcaption {
+  position: absolute;
+  left: 37%;
+  top: 42%;
+  background: #fff1db;
+  color: #6a4319;
+  border-radius: 5px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.youart-guide-steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 24px;
+  padding-left: 22px;
+  margin: 0 0 22px;
+}
+.youart-guide-steps li {
+  padding-left: 3px;
+}
+.youart-guide-steps strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+.youart-guide-steps p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin-top: 7px;
+}
+.guide-prompt label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.guide-prompt textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7f8fc;
+  color: var(--ink);
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+@media (max-width: 650px) {
+  .youart-guide-steps {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .youart-home-figure figcaption {
+    font-size: 9px;
+    padding: 3px 5px;
+  }
+  .youart-entry-highlight {
+    border-width: 2px;
+  }
+}
+.guide-explainer {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.guide-explainer .youart-guide-steps {
+  display: block;
+}
+.guide-explainer .youart-guide-steps li {
+  margin-bottom: 16px;
+}
+.guide-explainer .youart-home-figure figcaption {
+  left: 25%;
+  top: 49%;
+  font-size: 10px;
+}
+@media (max-width: 700px) {
+  .guide-explainer {
+    grid-template-columns: 1fr;
+  }
+}
+.youart-guide-dialog .dialog-header {
+  margin-bottom: 18px;
+}
+.youart-guide-dialog .guide-prompt textarea {
+  min-height: 84px;
+}

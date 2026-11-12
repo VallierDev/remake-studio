@@ -220,6 +220,73 @@
         在“设置”中连接当前 Chrome，并保持 Chrome 与 Glance Bridge 连接。
       </p>
     </dialog>
+    <dialog id="youart-guide-dialog" class="youart-guide-dialog">
+      <div class="dialog-header">
+        <div>
+          <h2>YouArt Desktop 爆款复刻怎么用</h2>
+          <p>
+            先在 YouArt 桌面端首页点击「爆款复刻」，再加入参考视频与商品图。
+          </p>
+        </div>
+        <button
+          class="icon-button"
+          data-close="youart-guide-dialog"
+          aria-label="关闭指南"
+        >
+          ×
+        </button>
+      </div>
+      <div class="guide-explainer">
+        <figure class="youart-home-figure">
+          <img
+            src="/static/images/youart-home.jpg"
+            alt="YouArt Desktop 真实首页，下方功能栏的爆款复刻入口已标出"
+          />
+          <span class="youart-entry-highlight" aria-hidden="true"></span>
+          <figcaption>首页输入框下方 → 爆款复刻</figcaption>
+        </figure>
+        <ol class="youart-guide-steps">
+          <li>
+            <strong>点击「爆款复刻」</strong>
+            <p>
+              打开 YouArt Desktop
+              首页，点击输入框下方的「爆款复刻」。输入框会显示 Viral Remake
+              标签。
+            </p>
+          </li>
+          <li>
+            <strong>加入参考片和商品图</strong>
+            <p>
+              粘贴从找片工具复制的 TikTok
+              链接，添加自己的商品图。若链接导入失败，可以上传已下载的 MP4
+              原片。
+            </p>
+          </li>
+          <li>
+            <strong>说明想怎么改</strong>
+            <p>
+              写清楚要保留的镜头节奏、要替换的商品和场景，检查模型与积分报价后生成。
+            </p>
+          </li>
+        </ol>
+      </div>
+      <div class="guide-prompt">
+        <label for="youart-example-prompt">以圣诞挂件为例</label>
+        <textarea id="youart-example-prompt" readonly rows="3">
+参考这条视频的开场和剪辑节奏，改成我上传图片里的圣诞挂件。先展示商品细节，再拍挂上圣诞树后的效果。使用新的场景和文案，做一条9:16竖屏视频。先给方案和积分报价，确认后再生成。</textarea
+        >
+      </div>
+      <div class="dialog-footer">
+        <button class="secondary" id="copy-youart-prompt">复制示例提示词</button
+        ><a
+          class="primary"
+          href="https://youart.ai/download"
+          target="_blank"
+          rel="noopener"
+          >下载 YouArt Desktop</a
+        >
+      </div>
+    </dialog>
     <dialog id="image-dialog">
       <button
         class="icon-button image-close"

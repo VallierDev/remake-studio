@@ -386,7 +386,7 @@ function openVideoLibrary() {
     : "搜索商品，找到相关爆款，选中一条开始复刻。";
   $("#breadcrumb").textContent = "爆款视频";
   $("#task-actions").innerHTML = finderMode
-    ? '<a class="secondary" href="https://youart.ai/download" target="_blank" rel="noopener">下载 YouArt Desktop</a>'
+    ? '<button class="secondary" data-youart-guide>去 YouArt 复刻 · 使用指南</button>'
     : '<button class="secondary" id="video-settings">自动更新设置</button>';
   $("#pipeline").hidden = true;
   $("#task-notice").hidden = true;
@@ -691,7 +691,8 @@ document.addEventListener("click", async (event) => {
       const copied = document.execCommand("copy");
       field.remove();
       if (!copied) await navigator.clipboard.writeText(copy.dataset.copyVideo);
-      toast("视频链接已复制，粘贴到 YouArt Desktop 的爆款复刻入口");
+      toast("视频链接已复制");
+      $("#youart-guide-dialog").showModal();
     } catch (error) {
       toast("复制未完成，请打开原片后复制地址");
     }
@@ -732,6 +733,22 @@ document.addEventListener("input", (event) => {
     () => loadVideos().catch((error) => toast(error.message)),
     300,
   );
+});
+
+document.addEventListener("click", async (event) => {
+  if (event.target.closest("[data-youart-guide]"))
+    $("#youart-guide-dialog").showModal();
+  if (event.target.closest("#copy-youart-prompt")) {
+    const input = $("#youart-example-prompt");
+    input.select();
+    try {
+      if (!document.execCommand("copy"))
+        await navigator.clipboard.writeText(input.value);
+      toast("示例提示词已复制");
+    } catch {
+      toast("请选中示例提示词后复制");
+    }
+  }
 });
 
 if (finderMode) {

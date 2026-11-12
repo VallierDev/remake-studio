@@ -8,3 +8,5 @@
 - Glance and Ollama are optional local integrations. Google Flow is a hosted web service accessed through the user's own browser account.
 
 [Flow2API](https://github.com/TheSmallHanCat/flow2api) is an optional project-managed local service, fetched at revision 2cf700d1c6f36348b37405dbc0c9a2d5397338e4 by the installer. MIT, copyright 2025 TheSmallHanCat. The fetched source retains its LICENSE.
+
+The YouArt Desktop home-screen screenshot in `web/images/youart-home.jpg` illustrates the product workflow. YouArt branding and interface belong to their respective owner.
