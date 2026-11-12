@@ -10,9 +10,11 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 
 面向教程读者的找片版负责搜索商品、核实播放与互动、定期更新列表。找到参考视频后，点击“复制链接”，粘贴到 YouArt Desktop 的“爆款复刻 / Viral Remake”入口，上传商品图并说明要改成什么。
 
-先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)，下载源码 ZIP 并解压，在源码目录运行：
+先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)，下载 [源码 ZIP](https://github.com/VallierDev/remake-studio/archive/refs/heads/codex/open-source.zip) 并解压，或克隆仓库，在源码目录运行：
 
 ```sh
+git clone https://github.com/VallierDev/remake-studio.git
+cd remake-studio
 ./setup.sh --finder
 ./start-finder.sh
 ```
