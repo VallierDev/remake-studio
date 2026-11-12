@@ -65,6 +65,15 @@ class WorkbenchTests(unittest.TestCase):
                                     headers={"Origin":"https://outside.example"})
         self.assertEqual(response.status_code, 403)
 
+    def test_library_has_direct_entry_and_fresh_assets(self):
+        response = self.client.get("/videos")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="viral-nav"', response.text)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        asset = self.client.get("/static/app.js")
+        self.assertEqual(asset.status_code, 200)
+        self.assertEqual(asset.headers["cache-control"], "no-store")
+
     def test_video_library_deduplicates_and_uses_latest_metrics(self):
         for name, date, views, rate in (("old", "2026-11-10T00:00:00Z", 900000, .09),
                                        ("new", "2026-11-12T00:00:00Z", 80000, .03)):

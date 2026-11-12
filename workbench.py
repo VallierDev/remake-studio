@@ -227,12 +227,14 @@ async def local_origin(request: Request, call_next):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "工作台只接受本机页面的操作"}, status_code=403)
     response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
 @app.get("/")
+@app.get("/videos")
 def index():
     return FileResponse(ROOT / "web/index.html")
 

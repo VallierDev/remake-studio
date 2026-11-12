@@ -9,6 +9,7 @@ const escapeHTML = (value) =>
   );
 const state = {
   page:
+    location.pathname === "/videos" ||
     new URLSearchParams(location.search).get("view") === "viral"
       ? "viral"
       : "task",
@@ -141,7 +142,7 @@ async function selectRun(name) {
   const detail = await api("/api/runs/" + encodeURIComponent(name));
   if (state.page !== "task" || state.selected !== name) return;
   state.detail = detail;
-  history.replaceState(null, "", "?run=" + encodeURIComponent(name));
+  history.replaceState(null, "", "/?run=" + encodeURIComponent(name));
   renderRuns();
   renderDetail();
 }
@@ -358,7 +359,7 @@ function openVideoLibrary() {
   $("#pipeline").hidden = true;
   $("#task-notice").hidden = true;
   $(".workspace-tabs").hidden = true;
-  history.replaceState(null, "", "?view=viral");
+  history.replaceState(null, "", "/videos");
   $("#workspace").innerHTML = `
     <div class="video-filters">
       <label class="field video-search"><span>搜索视频、作者或关键词</span><input id="video-query" placeholder="例如 christmas、红裙或作者名" data-video-filter></label>
@@ -369,7 +370,19 @@ function openVideoLibrary() {
     <p id="video-library-count" class="library-count">正在汇总已核实视频…</p>
     <div id="video-library-results"></div>`;
   renderRuns();
-  loadVideos().catch((error) => toast(error.message));
+  loadVideos().catch(showLibraryError);
+}
+
+function showLibraryError(error) {
+  const results = $("#video-library-results");
+  if (!results) return;
+  $("#video-library-count").textContent = "视频列表加载失败";
+  results.innerHTML =
+    '<div class="notice" role="alert"><p></p><button class="secondary" id="retry-video-library">重新加载列表</button></div>';
+  results.querySelector("p").textContent = error.message;
+  $("#retry-video-library").addEventListener("click", () =>
+    loadVideos().catch(showLibraryError),
+  );
 }
 
 async function loadVideos() {
@@ -485,7 +498,7 @@ $("#create-form").addEventListener("submit", async (event) => {
     state.selected = created.run;
     state.fingerprint = "";
     state.view = "result";
-    history.replaceState(null, "", "?run=" + encodeURIComponent(created.run));
+    history.replaceState(null, "", "/?run=" + encodeURIComponent(created.run));
     await refresh();
     toast("任务已加入队列");
   } catch (error) {
