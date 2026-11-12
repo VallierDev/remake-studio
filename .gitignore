@@ -1,0 +1,15 @@
+/.venv/
+/.scout-venv/
+/.rea-alt/
+/.rea-state/
+/vendor/
+/runs/
+__pycache__/
+/.flow-profile/
+/.playwright/
+.env
+.env.*
+*.mp4
+*.mov
+*.webm
+.DS_Store
