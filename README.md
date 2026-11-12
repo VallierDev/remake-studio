@@ -41,16 +41,30 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 输出保存在 `runs/<运行名>/`。从 `candidates.json` 查看筛选结果，从 `rea/report.html` 查看切点和包装分析，从 `storyboard.json` 和 `flow-prompt.txt` 查看制作计划。`flow-output.mp4` 为 Flow 原片，`final.mp4` 为带标题且通过解码检查的成片，`preview.jpg` 为逐秒抽帧。字幕默认使用分镜标题，可用 `--caption` 和 `--font` 覆盖。YouArt 演示使用单独生成的 `youart-brief.md`。
 
 
-## Flow2API 后端
+## 项目内 Flow2API
 
-已配置 Flow2API 网关时，设置本机环境变量 `FLOW2API_API_KEY`，可用 `FLOW2API_BASE_URL` 覆盖默认的 `http://127.0.0.1:8000`。远程网关可用 HTTPS 或 SSH 隧道。先只读核对网关和模型：
+安装项目自己管理的 Flow2API 运行时，并登录 Google Flow：
 
 ```sh
+./setup.sh --flow2api
+.venv/bin/python remake.py --flow2api-login
 .venv/bin/python remake.py --flow2api-check
 ```
 
-在运行命令末尾加 `--flow-backend flow2api`，或用 `--flow2api-model` 指定支持 8 秒竖屏文生视频的模型。默认是 `veo_3_1_t2v_fast_portrait`。该后端通过流式 API 生成，和网页后端共享分镜、字幕、下载和 MP4 验收。网关接口未返回提交前的积分报价，`--max-flow-credits` 仅约束网页后端。
+安装器从公开上游下载固定版本到 `vendor/flow2api`，依赖位于 `.flow2api-venv`。启动时生成随机的本地 API 和管理员凭据，配置、数据库、缓存和登录浏览器放在忽略提交的 `.flow2api/`。服务只监听 `127.0.0.1:18781`，生成前会自动检查和启动它。
 
-Flow2API 已返回视频地址而下载中断时，可带 `--flow-backend flow2api --resume` 继续下载。生成流断开且尚未返回地址时，需要先查网关任务日志。当前网关协议未返回用于客户端恢复轮询的任务 ID。
+首次在项目专用 Chrome 窗口登录 Google Flow。浏览器配置会保存在本机，并供 Flow2API 的本机浏览器使用。已有 Glance 会话也可用 `--flow2api-import-tab <Flow 标签页 ID>` 导入，不过 Google 可能要求在独立浏览器重新登录。
+
+```sh
+.venv/bin/python remake.py --flow2api-service status
+.venv/bin/python remake.py --flow2api-service stop
+.venv/bin/python remake.py --flow2api-service start
+```
+
+在生成命令末尾加 `--flow --flow-backend flow2api`。默认模型是 `veo-3.1-fast-8s-portrait`，可用 `--flow2api-model omni-1.2-flash-8s-portrait` 等模型覆盖。它和网页后端共享分镜、下载、字幕、成片验收。网关接口未返回提交前的积分报价，`--max-flow-credits` 仅约束网页后端。
+
+已返回视频地址而下载中断时，带 `--flow-backend flow2api --resume` 继续下载。生成流断开且尚未返回地址时，需要先查看本地任务日志，避免重复提交。流式接口目前没有返回可用于客户端恢复轮询的任务 ID。
+
+需要连接自行部署的其他兼容网关时，显式设置 `--flow2api-url` 和本机环境变量 `FLOW2API_API_KEY`。运行产物中的 `flow2api-job.json` 保存当前任务进度。
 
 本项目采用 [MIT 许可证](LICENSE)。第三方组件见 [THIRD_PARTY.md](THIRD_PARTY.md)。本地运行产物、浏览器配置和下载媒体由 Git 忽略。

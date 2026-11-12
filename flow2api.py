@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
-DEFAULT_MODEL = "veo_3_1_t2v_fast_portrait"
+DEFAULT_MODEL = "veo-3.1-fast-8s-portrait"
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -27,7 +27,10 @@ class VideoTag(HTMLParser):
 
 
 def gateway_config(base):
-    base = (base or os.getenv("FLOW2API_BASE_URL") or "http://127.0.0.1:8000").rstrip("/")
+    if not base:
+        from local_flow2api import credentials
+        return credentials()
+    base = base.rstrip("/")
     if base.endswith("/v1"):
         base = base[:-3]
     url = urlsplit(base)

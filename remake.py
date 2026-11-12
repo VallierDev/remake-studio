@@ -314,8 +314,11 @@ def main():
     p.add_argument("--resume", action="store_true", help="继续同名任务的 Flow 阶段")
     p.add_argument("--flow-login", action="store_true", help="登录项目的独立 Chrome 配置")
     p.add_argument("--flow-backend", choices=("web", "flow2api"), default="web")
-    p.add_argument("--flow2api-url", help="Flow2API 服务地址，也可设 FLOW2API_BASE_URL")
-    p.add_argument("--flow2api-model", default="veo_3_1_t2v_fast_portrait")
+    p.add_argument("--flow2api-url", help="显式覆盖项目内 Flow2API 地址")
+    p.add_argument("--flow2api-model", default="veo-3.1-fast-8s-portrait")
+    p.add_argument("--flow2api-service", choices=("start", "stop", "status"), help="管理项目内 Flow2API")
+    p.add_argument("--flow2api-import-tab", type=int, help="导入已登录 Flow 的 Glance Chrome 标签页")
+    p.add_argument("--flow2api-login", action="store_true", help="登录并导入本项目的 Google Flow 账号")
     p.add_argument("--flow2api-check", action="store_true", help="核对网关连接和模型列表")
     p.add_argument("--flow-browser", choices=("playwright", "glance"), default="playwright")
     p.add_argument("--flow-profile", type=Path, default=ROOT / ".flow-profile")
@@ -327,6 +330,17 @@ def main():
     p.add_argument("--font", type=Path, help="覆盖成片标题字体")
     p.add_argument("--run", help="运行目录名，字母、数字、横线或下划线")
     args = p.parse_args()
+    if args.flow2api_service or args.flow2api_login or args.flow2api_import_tab:
+        import local_flow2api
+        if args.flow2api_import_tab:
+            local_flow2api.import_chrome(args.flow2api_import_tab, args.chrome_profile)
+        elif args.flow2api_login:
+            local_flow2api.login()
+        elif args.flow2api_service == "stop":
+            local_flow2api.stop()
+        else:
+            local_flow2api.status()
+        return
     if args.flow2api_check:
         from flow2api import check_model
         check_model(args.flow2api_url, args.flow2api_model)

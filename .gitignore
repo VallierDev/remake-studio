@@ -13,3 +13,5 @@ __pycache__/
 *.mov
 *.webm
 .DS_Store
+/.flow2api/
+/.flow2api-venv/
