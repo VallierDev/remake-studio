@@ -7,6 +7,7 @@ const escapeHTML = (value) =>
         c
       ],
   );
+const finderMode = document.documentElement.dataset.edition === "finder";
 const state = {
   page:
     location.pathname === "/settings"
@@ -89,6 +90,8 @@ function toast(message) {
 async function showCreate() {
   $("#create-form").reset();
   $("#generation-fields").hidden = true;
+  if (finderMode)
+    $("#create-form [value=generate]").closest("label").hidden = true;
   $("#create-submit").textContent = "开始找片";
   $("#form-error").textContent = "";
   $("#create-dialog").showModal();
@@ -147,6 +150,7 @@ function renderProgress(detail) {
 
 async function selectRun(name) {
   state.page = "task";
+  if (finderMode) state.view = "references";
   $("#viral-nav").classList.remove("active");
   $("#settings-nav").classList.remove("active");
   $("#pipeline").hidden = false;
@@ -174,6 +178,12 @@ function renderDetail() {
     ${detail.can_resume ? '<button class="secondary" id="resume-task">继续生成</button>' : ""}
   `;
   renderProgress(detail);
+  if (finderMode) {
+    $("#pipeline").hidden = true;
+    document
+      .querySelectorAll('[data-view="result"],[data-view="storyboard"]')
+      .forEach((element) => (element.hidden = true));
+  }
   const notice = $("#task-notice");
   notice.hidden = true;
   notice.className = "notice";
@@ -371,11 +381,13 @@ function openVideoLibrary() {
   $("#viral-nav").classList.add("active");
   $("#settings-nav").classList.remove("active");
   $("#task-title").textContent = "爆款视频列表";
-  $("#task-subtitle").textContent =
-    "搜索商品，找到相关爆款，选中一条开始复刻。";
+  $("#task-subtitle").textContent = finderMode
+    ? "搜索商品、筛选原片，复制链接到 YouArt Desktop 复刻。"
+    : "搜索商品，找到相关爆款，选中一条开始复刻。";
   $("#breadcrumb").textContent = "爆款视频";
-  $("#task-actions").innerHTML =
-    '<button class="secondary" id="video-settings">自动更新设置</button>';
+  $("#task-actions").innerHTML = finderMode
+    ? '<a class="secondary" href="https://youart.ai/download" target="_blank" rel="noopener">下载 YouArt Desktop</a>'
+    : '<button class="secondary" id="video-settings">自动更新设置</button>';
   $("#pipeline").hidden = true;
   $("#task-notice").hidden = true;
   $(".workspace-tabs").hidden = true;
@@ -442,7 +454,9 @@ async function loadVideos() {
             ? "搜索未完成，可在左侧打开搜索任务查看原因。"
             : state.searchQuery
               ? "“" + state.searchQuery + "”的相关视频"
-              : "点击“复刻”会使用当前 Flow 账号生成视频。";
+              : finderMode
+                ? "复制链接，在 YouArt Desktop 的“爆款复刻”里粘贴，并说明要改成什么。"
+                : "点击“复刻”会使用当前 Flow 账号生成视频。";
   const fingerprint = JSON.stringify({ result, searching, searchStatus });
   if (fingerprint === state.videoFingerprint) return;
   state.videoFingerprint = fingerprint;
@@ -456,14 +470,14 @@ async function loadVideos() {
         " 条";
   $("#video-library-results").innerHTML = result.videos.length
     ? `
-    <div class="table-wrap"><table><thead><tr><th>视频 / 作者</th><th>播放</th><th>点赞</th><th>加权互动率</th><th>数据更新</th><th>复刻</th></tr></thead><tbody>
+    <div class="table-wrap"><table><thead><tr><th>视频 / 作者</th><th>播放</th><th>点赞</th><th>加权互动率</th><th>数据更新</th><th>${finderMode ? "去复刻" : "复刻"}</th></tr></thead><tbody>
     ${result.videos
       .map(
         (row) => `<tr>
       <td class="video-cell"><a class="candidate-caption library-video-title" href="${safeSource(row.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(row.description)}">${escapeHTML(row.description || "TikTok 视频")}</a><div class="candidate-author">@${escapeHTML(row.author || "TikTok")}</div></td>
       <td class="video-views">${formatCount(row.views)}</td><td>${formatCount(row.likes)}</td><td>${((row.weighted_engagement_rate || 0) * 100).toFixed(2)}%</td>
       <td class="video-updated">${row.checked_at ? shortDate(row.checked_at) : "—"}</td>
-      <td><button class="primary remake-video" title="生成一条视频，会使用 Flow 积分" data-remake-video="${escapeHTML(row.id)}">复刻</button></td>
+      <td>${finderMode ? '<button class="primary copy-video" data-copy-video="' + escapeHTML(row.url) + '">复制链接</button>' : '<button class="primary remake-video" title="生成一条视频，会使用 Flow 积分" data-remake-video="' + escapeHTML(row.id) + '">复刻</button>'}</td>
     </tr>`,
       )
       .join("")}</tbody></table></div>`
@@ -546,6 +560,19 @@ async function openSettings() {
         <button class="secondary" id="connect-current-chrome">连接当前 Chrome</button>
         <p id="chrome-connect-status" class="settings-hint"></p>
       </section></div>`;
+    if (finderMode) {
+      $("#connect-current-chrome")?.remove();
+      $("#chrome-connect-status")?.remove();
+      document
+        .querySelectorAll(".settings-subheading")
+        .forEach((element) => (element.hidden = true));
+      const help = [...document.querySelectorAll(".settings-hint")].find(
+        (element) => element.textContent.includes("当前 Chrome 登录 Flow"),
+      );
+      if (help)
+        help.textContent =
+          "找到原片后，复制链接到 YouArt Desktop 的“爆款复刻”入口，再说明商品和修改目标。";
+    }
     $("#settings-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = new FormData(event.target);
@@ -653,6 +680,22 @@ document.addEventListener("click", async (event) => {
       toast(error.message);
     }
   }
+  const copy = event.target.closest("[data-copy-video]");
+  if (copy) {
+    try {
+      const field = document.createElement("textarea");
+      field.value = copy.dataset.copyVideo;
+      field.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(field);
+      field.select();
+      const copied = document.execCommand("copy");
+      field.remove();
+      if (!copied) await navigator.clipboard.writeText(copy.dataset.copyVideo);
+      toast("视频链接已复制，粘贴到 YouArt Desktop 的爆款复刻入口");
+    } catch (error) {
+      toast("复制未完成，请打开原片后复制地址");
+    }
+  }
   const remake = event.target.closest("[data-remake-video]");
   if (remake) {
     remake.disabled = true;
@@ -691,6 +734,10 @@ document.addEventListener("input", (event) => {
   );
 });
 
+if (finderMode) {
+  document.title = "TikTok 爆款视频查找器";
+  $("#new-task").innerHTML = '<span aria-hidden="true">＋</span>找新视频';
+}
 $("#new-task").addEventListener("click", showCreate);
 $("#empty-new").addEventListener("click", showCreate);
 document.addEventListener("click", async (event) => {
@@ -757,7 +804,7 @@ $("#create-form").addEventListener("submit", async (event) => {
     $(".workspace-tabs").hidden = false;
     state.selected = created.run;
     state.fingerprint = "";
-    state.view = "result";
+    state.view = finderMode ? "references" : "result";
     history.replaceState(null, "", "/?run=" + encodeURIComponent(created.run));
     await refresh();
     toast("任务已加入队列");
@@ -773,6 +820,9 @@ $("#environment-button").addEventListener("click", async () => {
     '<div class="loading">正在检查本机环境…</div>';
   try {
     const system = await api("/api/system");
+    $(".environment-help").textContent = finderMode
+      ? "找到视频后，复制链接到 YouArt Desktop 的爆款复刻入口。"
+      : "在“设置”中连接当前 Chrome，并保持 Chrome 与 Glance Bridge 连接。";
     $("#environment-details").innerHTML = [
       ["Flow2API 本机服务", system.flow2api, "已就绪", "将在生成时启动"],
       ["当前 Chrome 会话", system.chrome_configured, "已配置", "待绑定"],
@@ -781,6 +831,7 @@ $("#environment-button").addEventListener("click", async () => {
       ["FFmpeg", system.ffmpeg, "已安装", "待安装"],
       ["yt-dlp", system.ytdlp, "已安装", "待安装"],
     ]
+      .filter(([name]) => !finderMode || name === "yt-dlp")
       .map(
         ([name, ok, on, off]) =>
           '<div class="environment-row"><span>' +

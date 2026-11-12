@@ -148,6 +148,15 @@ class WorkbenchTests(unittest.TestCase):
             "errors":["https://www.tiktok.com/@dress/video/11: 未核实到可播放的视频轨"]}))
         self.assertEqual(self.client.get("/api/videos").json()["verified_total"],0)
 
+    def test_finder_edition_only_collects_and_exports_video_links(self):
+        with patch.object(workbench, "FINDER_MODE", True):
+            response = self.client.get("/")
+            self.assertIn('data-edition="finder"', response.text)
+            self.assertEqual(self.client.post("/api/tasks",json={"mode":"generate"}).status_code,403)
+            self.assertEqual(self.client.post("/api/videos/11/remake",json={}).status_code,403)
+            self.assertEqual(self.client.post("/api/chrome/connect").status_code,403)
+            self.assertEqual(self.client.post("/api/videos/search",json={"query":"圣诞挂件"}).status_code,202)
+
     def test_resume_keeps_generation_checkpoint(self):
         response = self.client.post("/api/tasks", json={"keywords":"dress", "mode":"generate"})
         run = response.json()["run"]

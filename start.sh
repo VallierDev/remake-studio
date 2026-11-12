@@ -2,7 +2,11 @@
 set -eu
 cd "$(dirname "$0")"
 if [ ! -x .venv/bin/python ] || ! .venv/bin/python -c 'import fastapi,uvicorn' >/dev/null 2>&1; then
-    echo "首次使用请先运行 ./setup.sh --all"
+    if [ "${REMAKE_EDITION:-}" = "finder" ]; then
+        echo "首次使用请先运行 ./setup.sh --finder"
+    else
+        echo "首次使用请先运行 ./setup.sh --all"
+    fi
     exit 1
 fi
 if curl -fsS --max-time 1 http://127.0.0.1:18782/api/system >/dev/null 2>&1; then

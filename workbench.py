@@ -16,7 +16,7 @@ from urllib.request import urlopen
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -26,6 +26,7 @@ RUNS = ROOT / "runs"
 STATE = ROOT / ".workbench"
 SLUG = re.compile(r"[A-Za-z0-9_-]+")
 MODELS = {"omni-1.2-flash-8s-portrait", "veo-3.1-fast-8s-portrait"}
+FINDER_MODE = os.environ.get("REMAKE_EDITION") == "finder"
 stop_worker = threading.Event()
 TOPICS = {
     "christmas": {"label": "圣诞女装", "queries": ['"christmas party outfit" red dress', '"holiday outfit" sequin dress']},
@@ -232,7 +233,7 @@ async def lifespan(_app):
             raise RuntimeError("工作台已在运行") from error
         stop_worker.clear()
         threads = [threading.Thread(target=worker, args=(mode,), daemon=True, name=f"remake-{mode}")
-                   for mode in ("scout", "generate")]
+                   for mode in (("scout",) if FINDER_MODE else ("scout", "generate"))]
         for thread in threads:
             thread.start()
         yield
@@ -263,18 +264,22 @@ async def local_origin(request: Request, call_next):
 @app.get("/videos")
 @app.get("/settings")
 def index():
-    return FileResponse(ROOT / "web/index.html")
+    page = (ROOT / "web/index.html").read_text()
+    return HTMLResponse(page.replace('<html lang="zh-CN">', '<html lang="zh-CN" data-edition="' +
+                                      ("finder" if FINDER_MODE else "full") + '">'))
 
 
 @app.get("/api/system")
 def system():
     healthy = False
     try:
+        if FINDER_MODE:
+            raise OSError("Finder edition")
         with urlopen("http://127.0.0.1:18781/health", timeout=1) as response:
             healthy = response.status == 200
     except OSError:
         pass
-    return {"flow2api": healthy, "chrome_configured": (ROOT / ".flow2api/chrome.json").is_file(),
+    return {"edition": "finder" if FINDER_MODE else "full", "flow2api": healthy, "chrome_configured": (ROOT / ".flow2api/chrome.json").is_file(),
             "glance": bool(shutil.which("glance-mcp")), "ffmpeg": bool(shutil.which("ffmpeg")),
             "ytdlp": bool(shutil.which("yt-dlp")), "rea": (ROOT / "vendor/rea-video-sparse/rea_video").is_dir()}
 
@@ -386,6 +391,8 @@ def set_settings(value: UpdateSettings):
 
 @app.post("/api/chrome/connect")
 def connect_current_chrome():
+    if FINDER_MODE:
+        raise HTTPException(403, "找片版在 YouArt Desktop 中完成视频制作")
     from local_flow2api import use_current_chrome
     try:
         use_current_chrome()
@@ -449,6 +456,8 @@ def search_videos(value: SearchVideos):
 
 @app.post("/api/videos/{identity}/remake", status_code=202)
 def remake_video(identity: str, value: RemakeVideo):
+    if FINDER_MODE:
+        raise HTTPException(403, "复制视频链接，到 YouArt Desktop 爆款复刻入口使用")
     video = collected_videos().get(identity)
     if not video:
         raise HTTPException(404, "视频尚未收录，请先搜索")
@@ -519,6 +528,8 @@ def log(name: str):
 
 @app.post("/api/tasks", status_code=202)
 def create_task(options: TaskInput):
+    if FINDER_MODE and options.mode != "scout":
+        raise HTTPException(403, "找片版只创建视频检索任务")
     if options.model not in MODELS or not options.product.strip():
         raise HTTPException(422, "检查内容方向、商品描述和模型")
     data = options.model_dump()
@@ -543,7 +554,7 @@ def resume_task(name: str):
         if not job or job["status"] not in ("failed", "interrupted"):
             raise HTTPException(409, "当前任务无法恢复")
         options = json.loads(job["options"])
-        if options["mode"] != "generate" or not (RUNS / name / "result.json").is_file():
+        if FINDER_MODE or options["mode"] != "generate" or not (RUNS / name / "result.json").is_file():
             raise HTTPException(409, "请新建任务重新找片")
         # CLI checkpoints own submission recovery. The workbench never removes them.
         db.execute("UPDATE jobs SET status='queued',resume=1,updated=? WHERE run=?", (now(), name))
@@ -571,6 +582,7 @@ app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
 
 
 def main():
+    os.environ["PATH"] = str(ROOT / ".venv/bin") + os.pathsep + os.environ.get("PATH", "")
     import argparse
     import webbrowser
     import uvicorn

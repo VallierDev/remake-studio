@@ -6,6 +6,19 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 
 ![本地视频工作台](docs/workbench.png)
 
+## 找片版 · 搭配 YouArt Desktop
+
+面向教程读者的找片版负责搜索商品、核实播放与互动、定期更新列表。找到参考视频后，点击“复制链接”，粘贴到 YouArt Desktop 的“爆款复刻 / Viral Remake”入口，上传商品图并说明要改成什么。
+
+先安装 [uv](https://docs.astral.sh/uv/getting-started/installation/)，下载源码 ZIP 并解压，在源码目录运行：
+
+```sh
+./setup.sh --finder
+./start-finder.sh
+```
+
+打开 `http://127.0.0.1:18782`，可直接搜索“圣诞挂件”“圣诞树”“圣诞晚礼服”。每条视频有播放量、互动数据及“复制链接”按钮。找片版安装 Python Web 服务和 yt-dlp，商品检索走公开索引与 TikTok 回源核实。YouArt Desktop 可从 [官方下载页](https://youart.ai/download) 安装，视频制作在桌面端完成。
+
 ## 工作台 / Workbench
 
 安装后运行 `./start.sh`，或在 macOS 双击 `打开工作台.command`。工作台默认打开在 `http://127.0.0.1:18782`。

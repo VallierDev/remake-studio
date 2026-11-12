@@ -3,6 +3,12 @@ set -eu
 cd "$(dirname "$0")"
 mkdir -p vendor
 
+if [ "${1:-}" = "--finder" ]; then
+    [ -x .venv/bin/python ] || uv venv --python 3.13 .venv
+    uv pip install --python .venv/bin/python -r requirements-finder.txt
+    exit 0
+fi
+
 if [ "${1:-}" = "--all" ]; then
     sh "$0"
     sh "$0" --flow2api
