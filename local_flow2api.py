@@ -55,7 +55,7 @@ def configure():
         text = text.replace('admin_password = "admin"', f'admin_password = "{creds["admin_password"]}"', 1)
         text = text.replace('host = "0.0.0.0"', 'host = "127.0.0.1"', 1)
         text = text.replace('port = 8000', 'port = 18781', 1)
-        text = text.replace('captcha_method = "yescaptcha"', 'captcha_method = "personal"', 1)
+        text = text.replace('captcha_method = "yescaptcha"', 'captcha_method = "extension"', 1)
         text = text.replace('log_requests = true', 'log_requests = false')
         text = text.replace('log_responses = true', 'log_responses = false')
         # Store settings with the runtime data, while preserving upstream's lookup.
@@ -76,7 +76,7 @@ def configure():
     return creds
 
 
-def api(path, payload=None, admin=False):
+def api(path, payload=None, admin=False, method=None):
     creds = configure()
     if admin:
         token = api("/api/admin/login", {"username": creds["admin_username"],
@@ -86,7 +86,7 @@ def api(path, payload=None, admin=False):
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     data = json.dumps(payload).encode() if payload is not None else None
     try:
-        with urlopen(Request(BASE + path, data, headers), timeout=60 if payload else 10) as response:
+        with urlopen(Request(BASE + path, data, headers, method=method), timeout=60 if payload else 10) as response:
             return json.load(response)
     except HTTPError as error:
         raise ValueError(f"项目内 Flow2API 返回 HTTP {error.code}") from None
@@ -223,3 +223,66 @@ def import_chrome(tab_id, profile):
     if not response.get("success"):
         raise ValueError("Flow2API 导入账号失败")
     print("已将选定 Chrome 的 Flow 会话导入本项目")
+
+
+def live_flow_tab(profile="default"):
+    import re
+    from mcp_stdio import Glance
+    with Glance() as client:
+        listing = client.tool("chrome", {"action": "list_tabs", "bname": profile})
+        candidates = []
+        lines = listing.splitlines()
+        for index, line in enumerate(lines):
+            if f"[{profile} (" not in line or index + 1 >= len(lines):
+                continue
+            if not lines[index + 1].strip().startswith("https://flow.google.com/"):
+                continue
+            match = re.search(r"`(\d+)`", line)
+            if match:
+                candidates.append(int(match[1]))
+        for tab in candidates:
+            state = json.loads(client.tool("chrome", {"action": "evaluate", "bname": profile,
+                "tab_id": tab, "expression": """({
+                    host: location.hostname,
+                    signedIn: !!document.querySelector('button.new-project-button,button[aria-label="Home"],button[aria-label="Download media"]')
+                })"""}))
+            if state.get("host") == "flow.google.com" and state.get("signedIn"):
+                return tab
+    raise ValueError("请在当前 Chrome 打开已登录的 flow.google.com，再重试")
+
+
+def use_current_chrome(profile="default"):
+    ensure()
+    tab = live_flow_tab(profile)
+    # The gateway already owns this account. Refresh the first locally imported
+    # account from the selected live session instead of creating a duplicate.
+    from mcp_stdio import Glance
+    with Glance() as client:
+        data = json.loads(client.tool("chrome", {"action": "cdp", "bname": profile, "tab_id": tab,
+             "method": "Network.getCookies", "params": {"urls": [
+                 "https://flow.google.com/", "https://accounts.google.com/", "https://www.google.com/"]}}))
+    cookies = data.get("cookies", [])
+    if not cookies:
+        raise ValueError("当前 Flow 会话没有可导入的 Cookie")
+    # A session cookie must omit expiry when injected into another browser.
+    for cookie in cookies:
+        if cookie.get("expires", 1) <= 0:
+            cookie.pop("expires", None)
+    accounts = api("/api/tokens", admin=True)
+    if not isinstance(accounts, list):
+        accounts = accounts.get("tokens", accounts.get("data", []))
+    owned = next((item for item in accounts if item.get("remark", "").startswith("Project local")), None)
+    payload = {"google_cookies": json.dumps(cookies), "video_concurrency": 1,
+               "image_enabled": False, "video_enabled": True, "remark": "Project local Chrome Flow"}
+    if owned:
+        response = api(f"/api/tokens/{owned['id']}", payload, admin=True, method="PUT")
+    else:
+        response = api("/api/tokens", payload, admin=True)
+    if not response.get("success"):
+        raise ValueError("当前 Chrome 账号绑定失败")
+    response = api("/api/captcha/config", {"captcha_method": "extension"}, admin=True)
+    if not response.get("success"):
+        raise ValueError("Flow2API 无法切换到当前浏览器桥接")
+    api("/api/admin/debug", {"enabled": False}, admin=True)
+    private_json(RUNTIME / "chrome.json", {"profile": profile, "tab": tab})
+    return tab

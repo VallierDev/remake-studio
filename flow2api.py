@@ -1,5 +1,9 @@
 """Text-to-video through an independently configured Flow2API gateway."""
+from contextlib import contextmanager
 from html.parser import HTMLParser
+import subprocess
+import time
+import uuid
 import json
 import os
 from pathlib import Path
@@ -99,7 +103,38 @@ def save_private(path, value):
     temp.replace(path)
 
 
-def generate(run, base, model):
+
+@contextmanager
+def current_chrome_bridge(base, profile="default"):
+    from local_flow2api import BASE, ROOT, RUNTIME, use_current_chrome
+    if base != BASE:
+        yield
+        return
+    use_current_chrome(profile)
+    ready = RUNTIME / f"bridge-{uuid.uuid4().hex}.ready"
+    script = ROOT / "chrome_flow_bridge.py"
+    with (RUNTIME / "chrome-bridge.log").open("ab") as log:
+        process = subprocess.Popen([str(ROOT / ".flow2api-venv/bin/python"), str(script), str(ready)],
+                                   cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        deadline = time.monotonic() + 20
+        while not ready.is_file():
+            if process.poll() is not None or time.monotonic() > deadline:
+                raise ValueError("本机 Chrome 桥接未就绪，检查 .flow2api/chrome-bridge.log")
+            time.sleep(0.2)
+        yield
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        ready.unlink(missing_ok=True)
+
+
+def generate(run, base, model, profile="default"):
     destination = run / "flow-output.mp4"
     checkpoint = run / "flow2api-job.json"
     job = json.loads(checkpoint.read_text()) if checkpoint.is_file() else {}
@@ -119,8 +154,9 @@ def generate(run, base, model):
         print(f"Flow2API 提交一条视频（{model}；网关未提供生成前积分报价）", flush=True)
         headers.update({"Content-Type": "application/json", "Accept": "text/event-stream"})
         try:
-            with gateway_request(f"{base}/v1/chat/completions", headers, payload, timeout=480) as response:
-                job["video_url"] = stream_video(response)
+            with current_chrome_bridge(base, profile):
+                with gateway_request(f"{base}/v1/chat/completions", headers, payload, timeout=480) as response:
+                    job["video_url"] = stream_video(response)
         except (OSError, ValueError) as error:
             raise ValueError("Flow2API 未返回成片，已保留提交记录。检查网关任务日志后再重试。") from error
         job["status"] = "generated"

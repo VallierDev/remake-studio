@@ -273,7 +273,7 @@ def automate(args, run):
             if (run / "flow-job.json").exists() and not (run / "flow-output.mp4").exists():
                 raise ValueError("这个任务已有网页提交记录。使用新运行名切换到 Flow2API。")
             from flow2api import generate as generate_api
-            raw, job = generate_api(run, args.flow2api_url, args.flow2api_model)
+            raw, job = generate_api(run, args.flow2api_url, args.flow2api_model, args.chrome_profile)
         else:
             if (run / "flow2api-job.json").exists() and not (run / "flow-output.mp4").exists():
                 raise ValueError("这个任务使用了 Flow2API，恢复时请保留 --flow-backend flow2api。")
@@ -317,6 +317,7 @@ def main():
     p.add_argument("--flow2api-url", help="显式覆盖项目内 Flow2API 地址")
     p.add_argument("--flow2api-model", default="veo-3.1-fast-8s-portrait")
     p.add_argument("--flow2api-service", choices=("start", "stop", "status"), help="管理项目内 Flow2API")
+    p.add_argument("--flow2api-use-chrome", action="store_true", help="绑定当前已登录的 Glance Chrome")
     p.add_argument("--flow2api-import-tab", type=int, help="导入已登录 Flow 的 Glance Chrome 标签页")
     p.add_argument("--flow2api-login", action="store_true", help="登录并导入本项目的 Google Flow 账号")
     p.add_argument("--flow2api-check", action="store_true", help="核对网关连接和模型列表")
@@ -330,9 +331,12 @@ def main():
     p.add_argument("--font", type=Path, help="覆盖成片标题字体")
     p.add_argument("--run", help="运行目录名，字母、数字、横线或下划线")
     args = p.parse_args()
-    if args.flow2api_service or args.flow2api_login or args.flow2api_import_tab:
+    if args.flow2api_service or args.flow2api_login or args.flow2api_import_tab or args.flow2api_use_chrome:
         import local_flow2api
-        if args.flow2api_import_tab:
+        if args.flow2api_use_chrome:
+            local_flow2api.use_current_chrome(args.chrome_profile)
+            print("项目内 Flow2API 已绑定当前 Chrome")
+        elif args.flow2api_import_tab:
             local_flow2api.import_chrome(args.flow2api_import_tab, args.chrome_profile)
         elif args.flow2api_login:
             local_flow2api.login()

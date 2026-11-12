@@ -47,13 +47,15 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 
 ```sh
 ./setup.sh --flow2api
-.venv/bin/python remake.py --flow2api-login
+.venv/bin/python remake.py --flow2api-use-chrome
 .venv/bin/python remake.py --flow2api-check
 ```
 
 安装器从公开上游下载固定版本到 `vendor/flow2api`，依赖位于 `.flow2api-venv`。启动时生成随机的本地 API 和管理员凭据，配置、数据库、缓存和登录浏览器放在忽略提交的 `.flow2api/`。服务只监听 `127.0.0.1:18781`，生成前会自动检查和启动它。
 
-首次在项目专用 Chrome 窗口登录 Google Flow。浏览器配置会保存在本机，并供 Flow2API 的本机浏览器使用。已有 Glance 会话也可用 `--flow2api-import-tab <Flow 标签页 ID>` 导入，不过 Google 可能要求在独立浏览器重新登录。
+默认复用 Glance Chrome Bridge 连接的当前 Chrome。在 Chrome 打开并登录 `flow.google.com`，运行 `--flow2api-use-chrome` 后，项目内服务会导入这个会话。生成时，本机 WebSocket 桥接通过同一浏览器完成 Flow 所需的站点验证。每轮请求结束后自动关闭本机桥接进程，保留浏览器标签页。Google 出现交互式验证码或登录提示时需要人在浏览器处理。
+
+`--chrome-profile` 可指定 Glance 的浏览器配置名，默认是 `default`。`--flow2api-login` 保留为独立 Chrome 登录工具。
 
 ```sh
 .venv/bin/python remake.py --flow2api-service status
