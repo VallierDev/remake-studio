@@ -1,4 +1,5 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import io
 import json
 import os
 from pathlib import Path
@@ -7,7 +8,7 @@ from threading import Thread
 import unittest
 from unittest.mock import patch
 
-from flow2api import DEFAULT_MODEL, generate
+from flow2api import DEFAULT_MODEL, generate, stream_video
 
 
 class Gateway(BaseHTTPRequestHandler):
@@ -40,6 +41,21 @@ class Gateway(BaseHTTPRequestHandler):
             body = json.dumps({"choices": [{"delta": {"content": fragment}}]})
             self.wfile.write(f"data: {body}\n\n".encode())
         self.wfile.write(b"data: [DONE]\n\n")
+
+
+class StreamTests(unittest.TestCase):
+    def test_stream_is_drained_after_receiving_video(self):
+        event = json.dumps({"choices": [{"delta": {"content": '<video src="/tmp/result.mp4"></video>'}}]})
+        body = f"data: {event}\n\ndata: [DONE]\n\n".encode()
+        response = io.BytesIO(body)
+        self.assertEqual(stream_video(response), "/tmp/result.mp4")
+        self.assertGreaterEqual(response.tell(), len(body) - 1)
+
+    def test_trailing_error_is_not_ignored(self):
+        event = json.dumps({"choices": [{"delta": {"content": '<video src="/tmp/result.mp4"></video>'}}]})
+        response = io.BytesIO(f'data: {event}\n\ndata: {{"error":"completion failed"}}\n\n'.encode())
+        with self.assertRaises(ValueError):
+            stream_video(response)
 
 
 class GatewayTests(unittest.TestCase):

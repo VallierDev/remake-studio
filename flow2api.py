@@ -86,8 +86,8 @@ def stream_video(response):
                 text = delta.get(key)
                 if isinstance(text, str):
                     parser.feed(text)
-        if content.url or reasoning.url:
-            return content.url or reasoning.url
+    if content.url or reasoning.url:
+        return content.url or reasoning.url
     raise ValueError("Flow2API 未返回视频地址，请检查网关任务状态")
 
 
