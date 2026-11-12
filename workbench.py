@@ -15,7 +15,7 @@ import time
 from urllib.request import urlopen
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -259,6 +259,42 @@ def runs():
         paths.setdefault(name, RUNS / name)
     entries = [summary(path, jobs.get(name)) for name, path in paths.items()]
     return sorted((entry for entry in entries if entry), key=lambda item: item["created"], reverse=True)
+
+
+@app.get("/api/videos")
+def videos(q: str = Query(default="", max_length=500), min_views: int = Query(default=50000, ge=0),
+           min_engagement: float = Query(default=2, ge=0, allow_inf_nan=False),
+           sort: str = Query(default="views", pattern="^(views|engagement)$")):
+    collected = {}
+    for folder in sorted(RUNS.iterdir()):
+        if not folder.is_dir() or folder.is_symlink() or not SLUG.fullmatch(folder.name):
+            continue
+        data = read_json(folder / "candidates.json")
+        measured = data.get("checked_at", "")
+        for row in data.get("candidates", []):
+            identity = str(row.get("id", ""))
+            url = str(row.get("url", ""))
+            if not identity.isdigit() or not re.fullmatch(
+                    r"https://(?:www\.)?tiktok\.com/@[\w.-]+/video/" + identity, url):
+                continue
+            previous = collected.get(identity)
+            queries = set(previous.get("queries", [])) if previous else set()
+            queries.update(data.get("queries", []))
+            if previous is None or measured >= previous["checked_at"]:
+                collected[identity] = {key: row.get(key) for key in (
+                    "id", "url", "author", "description", "views", "likes", "comments", "shares",
+                    "saves", "duration", "upload_date", "weighted_engagement_rate")}
+                collected[identity].update(source_run=folder.name, checked_at=measured)
+            collected[identity]["queries"] = sorted(queries)
+    needle = q.strip().casefold()
+    selected = [row for row in collected.values()
+                if (row.get("views") or 0) >= min_views
+                and (row.get("weighted_engagement_rate") or 0) * 100 >= min_engagement
+                and (not needle or needle in " ".join(str(row.get(key) or "")
+                     for key in ("author", "description", "queries")).casefold())]
+    key = "views" if sort == "views" else "weighted_engagement_rate"
+    selected.sort(key=lambda row: (row.get(key) or 0, row.get("views") or 0), reverse=True)
+    return {"verified_total": len(collected), "total": len(selected), "videos": selected}
 
 
 @app.get("/api/runs/{name}")

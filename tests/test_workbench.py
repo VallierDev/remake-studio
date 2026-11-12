@@ -65,6 +65,35 @@ class WorkbenchTests(unittest.TestCase):
                                     headers={"Origin":"https://outside.example"})
         self.assertEqual(response.status_code, 403)
 
+    def test_video_library_deduplicates_and_uses_latest_metrics(self):
+        for name, date, views, rate in (("old", "2026-11-10T00:00:00Z", 900000, .09),
+                                       ("new", "2026-11-12T00:00:00Z", 80000, .03)):
+            root = workbench.RUNS / name
+            root.mkdir()
+            data = {"checked_at": date, "queries": [name], "candidates": [{
+                "id": "11", "url": "https://www.tiktok.com/@dress/video/11",
+                "author": "dress", "description": "Christmas red dress",
+                "views": views, "likes": 100, "weighted_engagement_rate": rate,
+            }]}
+            if name == "new":
+                data["candidates"].append({
+                    "id": "22", "url": "https://www.tiktok.com/@other/video/22",
+                    "views": 200000, "weighted_engagement_rate": .01,
+                    "description": "Holiday outfit", "author": "other",
+                })
+            (root / "candidates.json").write_text(json.dumps(data))
+        result = self.client.get("/api/videos").json()
+        self.assertEqual(result["verified_total"], 2)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["videos"][0]["views"], 80000)
+        self.assertEqual(result["videos"][0]["source_run"], "new")
+        self.assertEqual(result["videos"][0]["queries"], ["new", "old"])
+        self.assertEqual(self.client.get("/api/videos?q=CHRISTMAS").json()["total"], 1)
+        self.assertEqual(self.client.get("/api/videos?min_views=100000").json()["total"], 0)
+        sorted_result = self.client.get("/api/videos?min_engagement=0").json()
+        self.assertEqual([row["id"] for row in sorted_result["videos"]], ["22", "11"])
+        self.assertEqual(self.client.get("/api/videos?sort=engagement&min_engagement=0").json()["videos"][0]["id"], "11")
+
     def test_resume_keeps_generation_checkpoint(self):
         response = self.client.post("/api/tasks", json={"keywords":"dress", "mode":"generate"})
         run = response.json()["run"]

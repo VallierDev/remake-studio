@@ -8,6 +8,10 @@ const escapeHTML = (value) =>
       ],
   );
 const state = {
+  page:
+    new URLSearchParams(location.search).get("view") === "viral"
+      ? "viral"
+      : "task",
   runs: [],
   selected: null,
   detail: null,
@@ -90,8 +94,8 @@ function renderRuns() {
     state.runs
       .map(
         (run) => `
-    <button class="run-item ${run.run === state.selected ? "active" : ""}" data-run="${escapeHTML(run.run)}"
-      aria-current="${run.run === state.selected ? "page" : "false"}">
+    <button class="run-item ${state.page === "task" && run.run === state.selected ? "active" : ""}" data-run="${escapeHTML(run.run)}"
+      aria-current="${state.page === "task" && run.run === state.selected ? "page" : "false"}">
       <span class="run-title">${escapeHTML(run.title)}</span>
       <span class="run-meta"><span>${shortDate(run.created)}</span>
       <span class="run-status"><i class="dot ${escapeHTML(run.status)}"></i>${statuses[run.status] || run.status}</span></span>
@@ -128,15 +132,22 @@ function renderProgress(detail) {
 }
 
 async function selectRun(name) {
+  state.page = "task";
+  $("#viral-nav").classList.remove("active");
+  $("#pipeline").hidden = false;
+  $(".workspace-tabs").hidden = false;
   state.selected = name;
   state.fingerprint = "";
-  state.detail = await api("/api/runs/" + encodeURIComponent(name));
+  const detail = await api("/api/runs/" + encodeURIComponent(name));
+  if (state.page !== "task" || state.selected !== name) return;
+  state.detail = detail;
   history.replaceState(null, "", "?run=" + encodeURIComponent(name));
   renderRuns();
   renderDetail();
 }
 
 function renderDetail() {
+  if (state.page === "viral") return;
   const detail = state.detail;
   if (!detail) return;
   $("#task-title").textContent = detail.title;
@@ -307,6 +318,10 @@ async function refresh() {
         : state.runs.find((run) => run.has_video)?.run || state.runs[0].run;
     }
     renderRuns();
+    if (state.page === "viral") {
+      await loadVideos();
+      return;
+    }
     if (state.selected) {
       const detail = await api(
         "/api/runs/" + encodeURIComponent(state.selected),
@@ -330,6 +345,79 @@ async function refresh() {
     state.polling = false;
   }
 }
+
+function openVideoLibrary() {
+  state.page = "viral";
+  state.videoFingerprint = "";
+  $("#viral-nav").classList.add("active");
+  $("#task-title").textContent = "爆款视频库";
+  $("#task-subtitle").textContent =
+    "汇总各次搜索中核实过的视频，保留最新一次的播放和互动数据。";
+  $("#breadcrumb").textContent = "爆款视频";
+  $("#task-actions").innerHTML = "";
+  $("#pipeline").hidden = true;
+  $("#task-notice").hidden = true;
+  $(".workspace-tabs").hidden = true;
+  history.replaceState(null, "", "?view=viral");
+  $("#workspace").innerHTML = `
+    <div class="video-filters">
+      <label class="field video-search"><span>搜索视频、作者或关键词</span><input id="video-query" placeholder="例如 christmas、红裙或作者名" data-video-filter></label>
+      <label class="field"><span>最低播放量</span><input id="video-min-views" type="number" value="50000" min="0" step="10000" data-video-filter></label>
+      <label class="field"><span>最低互动率 %</span><input id="video-min-rate" type="number" value="2" min="0" step="0.5" data-video-filter></label>
+      <label class="field"><span>排序</span><select id="video-sort" data-video-filter><option value="views">播放量从高到低</option><option value="engagement">互动率从高到低</option></select></label>
+    </div>
+    <p id="video-library-count" class="library-count">正在汇总已核实视频…</p>
+    <div id="video-library-results"></div>`;
+  renderRuns();
+  loadVideos().catch((error) => toast(error.message));
+}
+
+async function loadVideos() {
+  if (state.page !== "viral" || !$("#video-query")) return;
+  const query = new URLSearchParams({
+    q: $("#video-query").value,
+    min_views: Math.max(0, Number($("#video-min-views").value) || 0),
+    min_engagement: Math.max(0, Number($("#video-min-rate").value) || 0),
+    sort: $("#video-sort").value,
+  });
+  const request = (state.videoRequest || 0) + 1;
+  state.videoRequest = request;
+  const result = await api("/api/videos?" + query);
+  if (state.page !== "viral" || request !== state.videoRequest) return;
+  const fingerprint = JSON.stringify(result);
+  if (fingerprint === state.videoFingerprint) return;
+  state.videoFingerprint = fingerprint;
+  $("#video-library-count").textContent =
+    "已核实 " +
+    result.verified_total +
+    " 条独立视频，当前筛选 " +
+    result.total +
+    " 条";
+  $("#video-library-results").innerHTML = result.videos.length
+    ? `
+    <div class="table-wrap"><table><thead><tr><th>视频 / 作者</th><th>播放</th><th>点赞</th><th>加权互动率</th><th>数据更新</th><th>来源</th></tr></thead><tbody>
+    ${result.videos
+      .map(
+        (row) => `<tr>
+      <td class="video-cell"><a class="candidate-caption library-video-title" href="${safeSource(row.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHTML(row.description)}">${escapeHTML(row.description || "TikTok 视频")}</a><div class="candidate-author">@${escapeHTML(row.author || "TikTok")}</div></td>
+      <td class="video-views">${formatCount(row.views)}</td><td>${formatCount(row.likes)}</td><td>${((row.weighted_engagement_rate || 0) * 100).toFixed(2)}%</td>
+      <td class="video-updated">${row.checked_at ? shortDate(row.checked_at) : "—"}</td>
+      <td><button class="source-task" data-run="${escapeHTML(row.source_run)}">查看任务</button></td>
+    </tr>`,
+      )
+      .join("")}</tbody></table></div>`
+    : '<div class="empty"><h2>没有符合条件的视频</h2><p>调整播放和互动门槛，或新建找片任务补充视频。</p></div>';
+}
+
+$("#viral-nav").addEventListener("click", openVideoLibrary);
+document.addEventListener("input", (event) => {
+  if (!event.target.matches("[data-video-filter]")) return;
+  clearTimeout(state.videoFilterTimer);
+  state.videoFilterTimer = setTimeout(
+    () => loadVideos().catch((error) => toast(error.message)),
+    300,
+  );
+});
 
 $("#new-task").addEventListener("click", showCreate);
 $("#empty-new").addEventListener("click", showCreate);
@@ -390,6 +478,10 @@ $("#create-form").addEventListener("submit", async (event) => {
       body: JSON.stringify(data),
     });
     $("#create-dialog").close();
+    state.page = "task";
+    $("#viral-nav").classList.remove("active");
+    $("#pipeline").hidden = false;
+    $(".workspace-tabs").hidden = false;
     state.selected = created.run;
     state.fingerprint = "";
     state.view = "result";
@@ -431,5 +523,6 @@ $("#environment-button").addEventListener("click", async () => {
     $("#environment-details").textContent = error.message;
   }
 });
+if (state.page === "viral") openVideoLibrary();
 refresh();
 setInterval(refresh, 3500);

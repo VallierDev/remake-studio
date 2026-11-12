@@ -12,6 +12,7 @@ Find TikTok references from keywords, break down shots with REA-Video, then gene
 
 - 输入关键词、最低播放与互动门槛，选择只找参考或生成成片。
 - 查看历史任务、候选数据、REA 抽帧、分镜和运行日志。
+- 在“爆款视频”页跨任务去重汇总视频，搜索作者与关键词，按播放量或互动率筛选排序，并回到来源任务。
 - 生成任务排队执行，沿用项目内 Flow2API 和当前 Chrome 登录态。
 - 预览与下载字幕成片。中断后保留任务记录与生成检查点。
 
